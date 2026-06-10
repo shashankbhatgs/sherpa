@@ -1,0 +1,1 @@
+- [Plan file location](feedback_plan_file_location.md) — plans live in the repo, never under ~/.claude/plans/
