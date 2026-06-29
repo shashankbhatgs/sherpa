@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "interview-sherpa"
+version = "0.1.0"
+description = "Local-first AI agent for SDE2 interview prep"
+requires-python = ">=3.14"
+dependencies = [
+    "ollama>=0.3.0",
+    "click>=8.1.0",
+    "gspread>=6.0",
+    "google-auth>=2.0",
+    "streamlit>=1.35",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock",
+]
+
+[project.scripts]
+sherpa = "sherpa.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sherpa"]
