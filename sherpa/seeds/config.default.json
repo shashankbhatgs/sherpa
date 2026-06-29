@@ -1,0 +1,15 @@
+{
+  "ollama_host": "http://localhost:11434",
+  "model_routing": {
+    "default":     {"provider": "ollama", "model": "qwen2.5:7b"},
+    "extraction":  {"provider": "ollama", "model": "qwen2.5:7b"},
+    "interviewer": {"provider": "ollama", "model": "qwen2.5:7b"}
+  },
+  "burnout": {
+    "daily_minutes_threshold": 180,
+    "cooldown_hours": 12
+  },
+  "tracker": {
+    "spreadsheet_url": null
+  }
+}
