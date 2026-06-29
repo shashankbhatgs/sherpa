@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/interview-sherpa.iml" filepath="$PROJECT_DIR$/interview-sherpa.iml" />
+      <module fileurl="file://$PROJECT_DIR$/sherpa.iml" filepath="$PROJECT_DIR$/sherpa.iml" />
     </modules>
   </component>
 </project>
