@@ -16,7 +16,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Workspace, hot-reload config | Done |
 | LLM routing (Claude Code CLI primary, Ollama fallback) | Done |
 | Tool loop + Resume Index + `fetch_full_resume` | Done |
-| Tracker (NL extraction, Google Sheets, JSONL fallback) | Done; missing-field follow-up pending (R4) |
+| Tracker (NL extraction, Google Sheets, JSONL fallback, missing-field follow-up) | Done |
 | Outreach (LinkedIn note + cold email) | Done |
 | Interviewer 4-state machine, crash-resilient ledger, code rubric, question bank | Done; DSA/LLD flow (R6) pending |
 | Burnout guard | Done, including advisory mode; tracker activity in stats (R5) pending |
@@ -80,7 +80,7 @@ When daily active minutes pass the threshold, the persona shifts to an advisory 
 
 **Done when:** every seeded question can be started from both CLI and UI, and resumed after a crash.
 
-### R4. Tracker missing-field follow-up
+### R4. Tracker missing-field follow-up - Done
 
 **Spec:** Module 2, "Validation Failure Loop" - pause insertion and ask for the missing parameter.
 

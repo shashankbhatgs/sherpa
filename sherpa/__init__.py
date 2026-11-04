@@ -1,7 +1,7 @@
 from sherpa.workspace import init_workspace
 from sherpa.config import get_config, _reset_config
 from sherpa.llm_router import get_provider, ProviderError
-from sherpa.tracker import track, ValidationGap
+from sherpa.tracker import track, complete_track, ValidationGap, VALID_STATES
 from sherpa.scout import resume_index, fetch_full_resume, draft_outreach, OutreachDraft, OutreachError
 from sherpa.code_review import evaluate_code, CodeReview, CodeReviewError
 from sherpa.question_bank import list_questions, load_question, Question, QuestionNotFoundError
@@ -15,7 +15,9 @@ __all__ = [
     "ProviderError",
     "_reset_config",
     "track",
+    "complete_track",
     "ValidationGap",
+    "VALID_STATES",
     "resume_index",
     "fetch_full_resume",
     "draft_outreach",

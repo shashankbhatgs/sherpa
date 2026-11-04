@@ -38,15 +38,21 @@ def init() -> None:
     click.echo("Workspace ready.")
 
 
+_FIELD_LABELS = {"company": "Company", "state": "Status"}
+
+
 @cli.command()
 @click.argument("text")
 def track(text: str) -> None:
     """Track a job application from natural language TEXT."""
     result = sherpa.track(text)
     if isinstance(result, ValidationGap):
-        click.secho(f"Missing required fields: {', '.join(result.missing)}", fg="yellow")
-        click.echo("Try again with more detail, e.g. 'Applied to Stripe for SDE2'.")
-        sys.exit(1)
+        click.secho(f"Need a bit more: {', '.join(_FIELD_LABELS[f] for f in result.missing)}", fg="yellow")
+        answers = {
+            field: click.prompt(_FIELD_LABELS[field], type=click.Choice(sherpa.VALID_STATES) if field == "state" else str)
+            for field in result.missing
+        }
+        result = sherpa.complete_track(result.partial, answers)
     click.secho("Tracked:", fg="green")
     click.echo(json.dumps(result, indent=2))
 

@@ -23,6 +23,7 @@ with tab_track:
     st.header("Track Application")
     text = st.text_area("Describe the application in plain English", placeholder="Applied to Stripe for SDE2 yesterday")
     if st.button("Track", key="track_btn") and text.strip():
+        st.session_state["track_gap"] = None
         try:
             with st.spinner("Extracting details..."):
                 result = sherpa.track(text)
@@ -30,10 +31,37 @@ with tab_track:
             st.error(str(exc))
         else:
             if isinstance(result, ValidationGap):
-                st.warning(f"Missing required fields: {', '.join(result.missing)}. Try adding more detail.")
+                st.session_state["track_gap"] = result
             else:
                 st.success("Tracked!")
                 st.json(result)
+
+    saved = st.session_state.pop("track_saved", None)
+    if saved is not None:
+        st.success("Tracked!")
+        st.json(saved)
+
+    gap: ValidationGap | None = st.session_state.get("track_gap")
+    if gap is not None:
+        st.warning("Need a bit more before saving.")
+        if gap.partial:
+            st.caption("Understood so far: " + ", ".join(f"{k}: {v}" for k, v in gap.partial.items()))
+        with st.form("track_followup"):
+            answers = {}
+            if "company" in gap.missing:
+                answers["company"] = st.text_input("Company")
+            if "state" in gap.missing:
+                answers["state"] = st.selectbox("Status", sherpa.VALID_STATES)
+            submitted = st.form_submit_button("Save")
+        if submitted:
+            completed = sherpa.complete_track(gap.partial, answers)
+            if isinstance(completed, ValidationGap):
+                st.session_state["track_gap"] = completed
+                st.error("Still missing: " + ", ".join(completed.missing))
+            else:
+                st.session_state["track_gap"] = None
+                st.session_state["track_saved"] = completed
+                st.rerun()
 
 # ── Interview ──────────────────────────────────────────────────────────────────
 with tab_interview:

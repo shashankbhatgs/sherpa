@@ -100,3 +100,126 @@ def test_llm_json_embedded_in_text(tmp_workspace, mocker):
     result = track("Got offer from Netflix")
     assert isinstance(result, dict)
     assert result["company"] == "Netflix"
+
+
+# --- missing-field follow-up ---
+
+from click.testing import CliRunner
+
+from sherpa.cli import cli
+from sherpa.tracker import complete_track
+
+
+def _lines(workspace):
+    path = workspace / "applications.jsonl"
+    return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_gap_keeps_partial_and_writes_nothing(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"role": "SDE2", "state": "applied", "notes": "via referral"}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    gap = track("applied for SDE2 via referral")
+
+    assert gap.missing == ["company"]
+    assert gap.partial == {"role": "SDE2", "state": "applied", "notes": "via referral"}
+    assert _lines(tmp_workspace) == []
+
+
+def test_complete_track_merges_answers_and_writes_one_row(tmp_workspace):
+    ws.init_workspace()
+
+    entry = complete_track({"role": "SDE2", "state": "applied"}, {"company": "  Stripe "})
+
+    assert entry["company"] == "Stripe"
+    assert entry["role"] == "SDE2"
+    assert _lines(tmp_workspace) == [entry]
+
+
+def test_complete_track_still_missing_returns_gap(tmp_workspace):
+    ws.init_workspace()
+
+    gap = complete_track({"role": "SDE2"}, {"company": "", "state": "applied"})
+
+    assert isinstance(gap, ValidationGap)
+    assert gap.missing == ["company"]
+    assert gap.partial["state"] == "applied"
+    assert _lines(tmp_workspace) == []
+
+
+@pytest.mark.parametrize("raw, expected", [("Applied", "applied"), ("phone screen", "phone_screen"), ("Phone-Screen", "phone_screen")])
+def test_state_is_normalized(tmp_workspace, mocker, raw, expected):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, json.dumps({"company": "Acme", "state": raw}))
+    mocker.patch("sherpa.tracker.get_provider")
+    assert track("x")["state"] == expected
+
+
+def test_unknown_state_counts_as_missing(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme", "state": "ghosted"}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    gap = track("Acme ghosted me")
+
+    assert isinstance(gap, ValidationGap)
+    assert gap.missing == ["state"]
+
+
+def test_non_string_fields_are_dropped(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme", "state": "offer", "role": 42, "notes": ["a"]}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    entry = track("offer from Acme")
+
+    assert "role" not in entry and "notes" not in entry
+
+
+def test_missing_date_defaults_to_today(tmp_workspace, mocker):
+    from datetime import date
+
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme", "state": "applied"}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    assert track("applied to Acme")["date"] == date.today().isoformat()
+
+
+def test_cli_asks_only_for_missing_fields(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"role": "SDE2"}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    result = CliRunner().invoke(cli, ["track", "applied somewhere for SDE2"], input="Stripe\napplied\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Need a bit more: Company, Status" in result.output
+    assert _lines(tmp_workspace)[0]["company"] == "Stripe"
+    assert _lines(tmp_workspace)[0]["role"] == "SDE2"
+
+
+def test_cli_rejects_invalid_status_choice(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme"}')
+    mocker.patch("sherpa.tracker.get_provider")
+
+    result = CliRunner().invoke(cli, ["track", "Acme"], input="ghosted\noffer\n")
+
+    assert result.exit_code == 0, result.output
+    assert "is not one of" in result.output
+    assert _lines(tmp_workspace)[0]["state"] == "offer"
+
+
+@pytest.mark.parametrize("placeholder", ["Unknown", "unknown", "N/A", "Not specified.", "  none  ", "?"])
+def test_placeholder_company_counts_as_missing(tmp_workspace, mocker, placeholder):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, json.dumps({"company": placeholder, "state": "applied", "role": "SDE2"}))
+    mocker.patch("sherpa.tracker.get_provider")
+
+    gap = track("applied for SDE2")
+
+    assert isinstance(gap, ValidationGap)
+    assert gap.missing == ["company"]
+    assert "company" not in gap.partial

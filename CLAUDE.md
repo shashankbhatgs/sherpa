@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-162 tests pass. The active focus is maintenance, refinement, and real usage.
+179 tests pass. The active focus is maintenance, refinement, and real usage.
 Remaining work and its implementation plan live in `ROADMAP.md`.
 
 ## Code Standards
@@ -78,7 +78,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 | `telemetry.py` | Per-day active-minute tallying; burnout circuit breaker |
 
 `sherpa/__init__.py` re-exports all public API — callers import from the package, never from sub-modules directly:
-`init_workspace`, `get_config`, `get_provider`, `track`, `ValidationGap`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`.
+`init_workspace`, `get_config`, `get_provider`, `track`, `complete_track`, `ValidationGap`, `VALID_STATES`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`.
 
 ### Key design decisions
 
@@ -91,6 +91,8 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 **Workspace** (`~/.sherpa/`): append-only JSONL (`applications.jsonl`) and Markdown logs under `interviews/` and `outreach/`. `init_workspace(force=False)` never overwrites user-edited files; `force=True` only reseeds packaged defaults (never touches `applications.jsonl`, `interviews/*`, or `outreach/*`). Seeds are packaged under `sherpa/seeds/` and copied via `importlib.resources`.
 
 **Interviewer state machine** (`sherpa/interviewer.py`): session state lives in YAML front-matter of `~/.sherpa/interviews/session_YYYYMMDD_N.md`. Turn blocks are written as `## role TIMESTAMP\ncontent`. Crash-resilient: `resume()` parses front-matter for state and replays markdown turns into the LLM's `messages` list. `start(topic=None, question=None)` checks the burnout circuit breaker before creating a session. With `question`, the bank file's text is appended to every state's system prompt (`_system_message()`), the name is stored as `question:` in front-matter, and `resume()` reloads it (a deleted file is logged and skipped).
+
+**Tracker validation** (`sherpa/tracker.py`): extraction output goes through `_normalize()` - known string fields only, whitespace collapsed, placeholder values ("Unknown", "N/A") dropped, state mapped onto `VALID_STATES` or dropped - and a missing date defaults to today. Missing `company`/`state` returns `ValidationGap(missing, partial)` without writing; the CLI prompts for just those fields (state as a choice) and the Track tab shows a form, both finishing with `complete_track(partial, answers)`.
 
 **Burnout guard** (`sherpa/telemetry.py`): parses ISO timestamps from turn headers to sum daily active minutes. Gaps ≥10 min between turns are excluded (idle time). When `config.burnout.daily_minutes_threshold` is exceeded, `is_blocked()` returns True and `InterviewSession.start()` raises `RuntimeError`. An open session keeps working in advisory mode: `turn()` swaps in `_PROMPT_ADVISORY` for that call (no tools, no state advance), sets `last_reply_advisory`, and marks the turn header `## assistant TS advisory`. Tracker and outreach always pass through.
 
@@ -122,7 +124,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
 - Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
-- 162 tests across 11 modules; full suite runs in ~3 seconds.
+- 179 tests across 11 modules; full suite runs in ~3 seconds.
 
 ### Skills
 
