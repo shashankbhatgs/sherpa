@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
 117 tests pass. The active focus is maintenance, refinement, and real usage.
+Remaining work and its implementation plan live in `ROADMAP.md`.
 
 ## Commands
 

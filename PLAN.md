@@ -1,5 +1,8 @@
 # Interview Sherpa — Phase 1 Implementation Plan
 
+> Historical: this was the Phase 1 build plan and is not kept up to date.
+> For current status and remaining work, see `ROADMAP.md`.
+
 ## Context
 
 We're bootstrapping a brand-new Python project per `sherpa_spec.md`: a local-first AI agent that helps an SDE2 candidate juggle high-ambiguity technical prep (HLD/LLD/DSA) with low-cognition admin work (application tracking, outreach). The repo is currently empty — only an empty `.venv` (Python 3.14) and the spec exist. There is no source code, no `pyproject.toml`, no package structure.
