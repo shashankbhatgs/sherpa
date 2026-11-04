@@ -42,6 +42,15 @@ sherpa outreach                    # opens $EDITOR to paste into
 Drafts are saved to `~/.sherpa/outreach/`.
 The same flow is in the Scout tab of the web UI (`streamlit run app.py`).
 
+## Review code
+
+```bash
+sherpa review --file solution.py --problem "LRU cache with O(1) get/put"
+```
+
+Scores correctness and edge cases, thread safety, and complexity (1-5), with concrete issues.
+In `sherpa interview`, paste code between ``` fences and it is reviewed automatically before the interviewer replies.
+
 ## Run tests
 
 ```bash

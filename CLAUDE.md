@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-123 tests pass. The active focus is maintenance, refinement, and real usage.
+147 tests pass. The active focus is maintenance, refinement, and real usage.
 Remaining work and its implementation plan live in `ROADMAP.md`.
 
 ## Code Standards
@@ -41,6 +41,7 @@ sherpa track "Applied to Stripe for SDE2"
 sherpa interview "Design a distributed cache"
 sherpa stats
 pbpaste | sherpa outreach        # or: sherpa outreach --file job.txt
+sherpa review --file solution.py --problem "LRU cache"
 
 # Run the Streamlit UI
 streamlit run app.py
@@ -70,11 +71,12 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 | `agent_loop.py` | Generic tool-dispatch loop for function-calling |
 | `tracker.py` | NL → JSON extraction; gspread sheet writer + JSONL fallback |
 | `scout.py` | Resume index (4-line metadata) + on-demand `fetch_full_resume()` tool; `draft_outreach()` cold-message engine |
+| `code_review.py` | Rubric scoring of code (correctness/edge cases, thread safety, complexity); `extract_code()` finds fenced blocks |
 | `interviewer.py` | 4-state machine: CLARIFYING → HIGH_LEVEL → DEEP_DIVE → FEEDBACK |
 | `telemetry.py` | Per-day active-minute tallying; burnout circuit breaker |
 
 `sherpa/__init__.py` re-exports all public API — callers import from the package, never from sub-modules directly:
-`init_workspace`, `get_config`, `get_provider`, `track`, `ValidationGap`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `OutreachDraft`, `OutreachError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`.
+`init_workspace`, `get_config`, `get_provider`, `track`, `ValidationGap`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`.
 
 ### Key design decisions
 
@@ -92,7 +94,9 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 
 **Outreach engine** (`sherpa/scout.py`): `draft_outreach(job_post)` sends only the Resume Index up front; the model calls `fetch_full_resume` when it judges the role a match. Returns an `OutreachDraft` (LinkedIn note capped at 300 chars, email subject + body) and saves it to `~/.sherpa/outreach/outreach_YYYYMMDD_N.md`. An over-long note gets one model rewrite, then a sentence/word-boundary trim. Unusable model output raises `OutreachError` and saves nothing. Not gated by the burnout guard (low-stress admin work).
 
-**CLI** (`sherpa/cli.py`): five Click commands. `sherpa outreach` reads the job post from `--file`, stdin, or `$EDITOR`. `sherpa interview` runs a REPL loop with state-transition display; with no topic argument it resumes the most recent non-FEEDBACK session from today.
+**Code review** (`sherpa/code_review.py`): `evaluate_code()` asks the `interviewer` tier for a JSON rubric; scores are coerced and clamped to 1-5 in code, issues capped at 5, and a missing score raises `CodeReviewError`. During an interview, a user message with a ``` block is reviewed before the reply: the review is written to the ledger as a `## review TS` block (skipped by `_parse_turns`, so not replayed on resume), injected as system context for that turn only, and exposed as `session.last_review`. A failed review is logged and the turn continues.
+
+**CLI** (`sherpa/cli.py`): six Click commands. The interview REPL reads multi-line input when a line opens a ``` fence. `sherpa outreach` reads the job post from `--file`, stdin, or `$EDITOR`. `sherpa interview` runs a REPL loop with state-transition display; with no topic argument it resumes the most recent non-FEEDBACK session from today.
 
 **Streamlit UI** (`app.py`): four tabs - Track, Interview (chat UI with `st.session_state`), Scout (job post to outreach draft), Stats. No business logic; all calls go to `sherpa.*` imports.
 
@@ -116,7 +120,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
 - Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
-- 123 tests across 9 modules; full suite runs in ~3 seconds.
+- 147 tests across 10 modules; full suite runs in ~3 seconds.
 
 ### Skills
 

@@ -18,7 +18,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Tool loop + Resume Index + `fetch_full_resume` | Done |
 | Tracker (NL extraction, Google Sheets, JSONL fallback) | Done; missing-field follow-up pending (R4) |
 | Outreach (LinkedIn note + cold email) | Done |
-| Interviewer 4-state machine, crash-resilient ledger | Done; code rubric (R2) and question bank (R3) pending |
+| Interviewer 4-state machine, crash-resilient ledger, code rubric | Done; question bank (R3) and DSA/LLD flow (R6) pending |
 | Burnout guard | Done, including advisory mode; tracker activity in stats (R5) pending |
 | CLI + Streamlit UI | Done |
 
@@ -48,7 +48,7 @@ When daily active minutes pass the threshold, the persona shifts to an advisory 
 
 **Done when:** an in-progress interview switches to advisory replies the moment the threshold is crossed.
 
-### R2. Code evaluation rubric
+### R2. Code evaluation rubric - Done
 
 **Spec:** Module 3, "Semantic Code Evaluation" - check thread safety, edge cases, and asymptotic complexity.
 
@@ -108,6 +108,18 @@ Recommended: show it, do not count it.
 **Approach (recommended option):** add a `tracked_at` timestamp to JSONL entries and outreach front-matter (already present), and add "applications today" and "outreach drafts today" to `sherpa stats` and the Stats tab.
 
 **Done when:** stats show today's interview minutes, applications, and outreach drafts separately.
+
+### R6. Interview flow per question type
+
+**Found while building R2:** every interview runs the system-design states (CLARIFYING asks for DAU/QPS/latency), so a DSA problem like LRU cache opens by asking for daily active users.
+
+**Approach:**
+- Add an interview `kind` (`hld`, `lld`, `dsa`) stored in front-matter; `hld` keeps today's flow.
+- `dsa`: CLARIFYING asks about input constraints and edge cases, then APPROACH, CODE (with the R2 rubric), FEEDBACK.
+- `lld`: CLARIFYING on requirements, then CLASS_DESIGN, CODE, FEEDBACK.
+- Question bank files (R3) declare their kind; free-text topics default to `hld` or take `--kind`.
+
+**Done when:** an LRU cache session never asks about DAU, and a distributed cache session still does.
 
 ---
 

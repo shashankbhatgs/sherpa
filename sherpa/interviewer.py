@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import sys
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from sherpa.agent_loop import run_tool_loop
+from sherpa.code_review import CodeReview, CodeReviewError, evaluate_code, extract_code
 from sherpa.llm_router import get_provider
 from sherpa.scout import FETCH_RESUME_TOOL, SCOUT_REGISTRY
 from sherpa.workspace import workspace_paths
@@ -73,6 +75,13 @@ Briefly acknowledge what they just said, give at most one short takeaway from to
 and encourage them to stop and come back after the cooldown. Keep it under 80 words and warm, not preachy."""
 
 ADVISORY_MARKER = "advisory"
+_REVIEW_ROLE = "review"
+
+_REVIEW_CONTEXT = """\
+A rubric review of the candidate's latest code is below. Use it to probe the weakest points with follow-up
+questions. Do not read the review out or list every issue at once.
+
+{review}"""
 
 _STATE_PROMPTS: dict[State, str] = {
     State.CLARIFYING: _PROMPT_CLARIFYING,
@@ -108,14 +117,14 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 def _parse_turns(body: str) -> list[dict]:
     """Parse ## user / ## assistant blocks into message dicts. Headers may have an optional timestamp."""
     messages: list[dict] = []
-    pattern = re.compile(r"^## (user|assistant)(?:[ \t]+\S+)*[ \t]*$", re.MULTILINE)
+    pattern = re.compile(rf"^## (user|assistant|{_REVIEW_ROLE})(?:[ \t]+\S+)*[ \t]*$", re.MULTILINE)
     parts = pattern.split(body)
     # parts alternates: [preamble, role, content, role, content, ...]
     i = 1
     while i + 1 < len(parts):
         role = parts[i].strip()
         content = parts[i + 1].strip()
-        if content:
+        if content and role != _REVIEW_ROLE:  # reviews are per-turn context, not chat history
             messages.append({"role": role, "content": content})
         i += 2
     return messages
@@ -161,6 +170,7 @@ class InterviewSession:
         self.started_at = started_at
         self.messages = messages
         self.last_reply_advisory = False
+        self.last_review: CodeReview | None = None
 
     @classmethod
     def start(cls, topic: str) -> "InterviewSession":
@@ -214,6 +224,12 @@ class InterviewSession:
         if advisory:
             call_messages[0] = {"role": "system", "content": _PROMPT_ADVISORY}
 
+        self.last_review = None if advisory else self._review_code_in(user_message)
+        if self.last_review is not None:
+            review_md = self.last_review.as_markdown()
+            self._append_block(_REVIEW_ROLE, review_md)
+            call_messages.append({"role": "system", "content": _REVIEW_CONTEXT.format(review=review_md)})
+
         response = run_tool_loop(
             provider=get_provider("interviewer"),
             messages=call_messages,
@@ -228,6 +244,16 @@ class InterviewSession:
         if not advisory:
             self._maybe_advance()
         return response
+
+    def _review_code_in(self, user_message: str) -> CodeReview | None:
+        code = extract_code(user_message)
+        if code is None:
+            return None
+        try:
+            return evaluate_code(code, problem=self.topic)
+        except CodeReviewError as exc:
+            print(f"sherpa interviewer: code review skipped ({exc})", file=sys.stderr)
+            return None
 
     def _append_block(self, role: str, content: str, marker: str | None = None) -> None:
         ts = datetime.now().isoformat(timespec="seconds")

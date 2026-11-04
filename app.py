@@ -75,6 +75,9 @@ with tab_interview:
         for msg in st.session_state["interview_messages"]:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
+                if msg.get("review"):
+                    with st.expander("Code review"):
+                        st.markdown(msg["review"])
                 if msg.get("advisory"):
                     st.caption("Advisory mode - burnout guard is on")
 
@@ -89,6 +92,8 @@ with tab_interview:
                     st.session_state["interview_messages"].pop()
                     st.error(str(exc))
             if response is not None:
+                if session.last_review is not None:
+                    st.session_state["interview_messages"][-1]["review"] = session.last_review.as_markdown()
                 st.session_state["interview_messages"].append(
                     {"role": "assistant", "content": response, "advisory": session.last_reply_advisory}
                 )

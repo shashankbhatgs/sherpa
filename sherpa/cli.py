@@ -134,11 +134,25 @@ def _resume_latest() -> InterviewSession | None:
     return None
 
 
+_FENCE = "```"
+
+
+def _read_message() -> str:
+    """Read one message; a line that opens a ``` fence keeps reading until the fence closes."""
+    lines = [click.prompt("You", prompt_suffix="> ")]
+    while lines[0].count(_FENCE) % 2 == 1:
+        line = input()
+        lines.append(line)
+        if line.count(_FENCE) % 2 == 1:
+            break
+    return "\n".join(lines)
+
+
 def _repl(session: InterviewSession) -> None:
-    click.echo("Type your response below. Enter 'quit' or Ctrl+D to exit.\n")
+    click.echo("Type your response below. Paste code between ``` fences. Enter 'quit' or Ctrl+D to exit.\n")
     while True:
         try:
-            user_input = click.prompt("You", prompt_suffix="> ")
+            user_input = _read_message()
         except (click.exceptions.Abort, EOFError):
             click.echo("\nSession paused. Resume with: sherpa interview")
             break
@@ -149,6 +163,8 @@ def _repl(session: InterviewSession) -> None:
         prev_state = session.state
         response = session.turn(user_input)
 
+        if session.last_review is not None:
+            click.secho(f"\n{session.last_review.as_markdown()}", fg="magenta")
         click.echo(f"\nInterviewer:\n{response}\n")
         if session.last_reply_advisory:
             click.secho("(Advisory mode - burnout guard is on. Time for a break.)\n", fg="yellow")
@@ -159,6 +175,24 @@ def _repl(session: InterviewSession) -> None:
         if session.state == State.FEEDBACK:
             click.secho("Interview complete. See feedback above.", fg="green")
             break
+
+
+@cli.command()
+@click.option("--file", "code_file", type=click.File("r"), help="Read the code from a file instead of stdin.")
+@click.option("--problem", default="", help="The problem the code solves, for context.")
+def review(code_file, problem: str) -> None:
+    """Score code for correctness, thread safety, and complexity.
+
+    Reads code from --file or stdin (e.g. `pbpaste | sherpa review`).
+    """
+    code = code_file.read() if code_file is not None else sys.stdin.read()
+    if not code.strip():
+        raise click.ClickException("No code given. Pass --file or pipe code in.")
+    try:
+        result = sherpa.evaluate_code(code, problem=problem)
+    except sherpa.CodeReviewError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(result.as_markdown())
 
 
 @cli.command()
