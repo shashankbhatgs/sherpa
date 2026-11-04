@@ -66,6 +66,14 @@ Evaluate the candidate's performance across the SDE2 rubric:
 
 Give a structured written evaluation with a score (1-5) per dimension and 2-3 concrete improvement suggestions."""
 
+_PROMPT_ADVISORY = """\
+You are a supportive interview coach. The candidate has passed their daily study limit, so the burnout guard is on.
+Do not ask new technical questions, start new problems, or push the design further.
+Briefly acknowledge what they just said, give at most one short takeaway from today's session,
+and encourage them to stop and come back after the cooldown. Keep it under 80 words and warm, not preachy."""
+
+ADVISORY_MARKER = "advisory"
+
 _STATE_PROMPTS: dict[State, str] = {
     State.CLARIFYING: _PROMPT_CLARIFYING,
     State.HIGH_LEVEL: _PROMPT_HIGH_LEVEL,
@@ -100,7 +108,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 def _parse_turns(body: str) -> list[dict]:
     """Parse ## user / ## assistant blocks into message dicts. Headers may have an optional timestamp."""
     messages: list[dict] = []
-    pattern = re.compile(r"^## (user|assistant)(?:[ \t]+\S+)?[ \t]*$", re.MULTILINE)
+    pattern = re.compile(r"^## (user|assistant)(?:[ \t]+\S+)*[ \t]*$", re.MULTILINE)
     parts = pattern.split(body)
     # parts alternates: [preamble, role, content, role, content, ...]
     i = 1
@@ -152,16 +160,17 @@ class InterviewSession:
         self.state = state
         self.started_at = started_at
         self.messages = messages
+        self.last_reply_advisory = False
 
     @classmethod
     def start(cls, topic: str) -> "InterviewSession":
         from sherpa.telemetry import is_blocked, burnout_status
         if is_blocked():
             status = burnout_status()
-            unblocks = status["unblocks_at"] or "later"
+            when = f"after {status['unblocks_at']}" if status["unblocks_at"] else "after the cooldown"
             raise RuntimeError(
                 f"Burnout guard: {status['daily_minutes']:.0f} active minutes today "
-                f"(threshold: {status['threshold']} min). Resume after {unblocks}."
+                f"(threshold: {status['threshold']} min). Start a new session {when}."
             )
         interviews_dir = workspace_paths()["interviews"]
         interviews_dir.mkdir(parents=True, exist_ok=True)
@@ -190,26 +199,41 @@ class InterviewSession:
         return cls(path=path, topic=topic, state=state, started_at=started_at, messages=messages)
 
     def turn(self, user_message: str) -> str:
+        """Send one candidate message and return the interviewer's reply.
+
+        While the burnout guard is active, the reply comes from an advisory coach persona,
+        the state machine does not advance, and `last_reply_advisory` is set.
+        """
+        from sherpa.telemetry import is_blocked
+
+        advisory = is_blocked()
         self._append_block("user", user_message)
         self.messages.append({"role": "user", "content": user_message})
 
+        call_messages = list(self.messages)
+        if advisory:
+            call_messages[0] = {"role": "system", "content": _PROMPT_ADVISORY}
+
         response = run_tool_loop(
             provider=get_provider("interviewer"),
-            messages=self.messages,
-            tools=[FETCH_RESUME_TOOL],
-            registry=SCOUT_REGISTRY,
+            messages=call_messages,
+            tools=[] if advisory else [FETCH_RESUME_TOOL],
+            registry={} if advisory else SCOUT_REGISTRY,
         )
 
-        self._append_block("assistant", response)
+        self._append_block("assistant", response, marker=ADVISORY_MARKER if advisory else None)
         self.messages.append({"role": "assistant", "content": response})
+        self.last_reply_advisory = advisory
 
-        self._maybe_advance()
+        if not advisory:
+            self._maybe_advance()
         return response
 
-    def _append_block(self, role: str, content: str) -> None:
+    def _append_block(self, role: str, content: str, marker: str | None = None) -> None:
         ts = datetime.now().isoformat(timespec="seconds")
+        header = f"## {role} {ts}" + (f" {marker}" if marker else "")
         with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(f"\n## {role} {ts}\n{content}\n")
+            fh.write(f"\n{header}\n{content}\n")
 
     def _maybe_advance(self) -> bool:
         next_state = _NEXT_STATE.get(self.state)

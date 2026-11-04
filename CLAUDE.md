@@ -5,8 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-117 tests pass. The active focus is maintenance, refinement, and real usage.
+123 tests pass. The active focus is maintenance, refinement, and real usage.
 Remaining work and its implementation plan live in `ROADMAP.md`.
+
+## Code Standards
+
+Before writing or changing code, load the `/clean-code` skill (`.claude/skills/clean-code/SKILL.md`) and follow it.
+Run its "Before you call the work done" checklist before every commit.
 
 ## Commands
 
@@ -83,7 +88,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 
 **Interviewer state machine** (`sherpa/interviewer.py`): session state lives in YAML front-matter of `~/.sherpa/interviews/session_YYYYMMDD_N.md`. Turn blocks are written as `## role TIMESTAMP\ncontent`. Crash-resilient: `resume()` parses front-matter for state and replays markdown turns into the LLM's `messages` list. `start()` checks the burnout circuit breaker before creating a session.
 
-**Burnout guard** (`sherpa/telemetry.py`): parses ISO timestamps from turn headers to sum daily active minutes. Gaps ≥10 min between turns are excluded (idle time). When `config.burnout.daily_minutes_threshold` is exceeded, `is_blocked()` returns True and `InterviewSession.start()` raises `RuntimeError`. Tracker writes always pass through.
+**Burnout guard** (`sherpa/telemetry.py`): parses ISO timestamps from turn headers to sum daily active minutes. Gaps ≥10 min between turns are excluded (idle time). When `config.burnout.daily_minutes_threshold` is exceeded, `is_blocked()` returns True and `InterviewSession.start()` raises `RuntimeError`. An open session keeps working in advisory mode: `turn()` swaps in `_PROMPT_ADVISORY` for that call (no tools, no state advance), sets `last_reply_advisory`, and marks the turn header `## assistant TS advisory`. Tracker and outreach always pass through.
 
 **Outreach engine** (`sherpa/scout.py`): `draft_outreach(job_post)` sends only the Resume Index up front; the model calls `fetch_full_resume` when it judges the role a match. Returns an `OutreachDraft` (LinkedIn note capped at 300 chars, email subject + body) and saves it to `~/.sherpa/outreach/outreach_YYYYMMDD_N.md`. An over-long note gets one model rewrite, then a sentence/word-boundary trim. Unusable model output raises `OutreachError` and saves nothing. Not gated by the burnout guard (low-stress admin work).
 
@@ -111,7 +116,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
 - Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
-- 117 tests across 9 modules; full suite runs in ~3 seconds.
+- 123 tests across 9 modules; full suite runs in ~3 seconds.
 
 ### Skills
 

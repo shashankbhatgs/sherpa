@@ -1,3 +1,4 @@
+import re
 import pytest
 import sherpa.workspace as ws
 from sherpa.interviewer import (
@@ -266,3 +267,108 @@ def test_state_written_to_file_on_advance(tmp_workspace, mocker):
 
     text = s.path.read_text()
     assert "state: HIGH_LEVEL" in text
+
+
+# --- Advisory mode (burnout guard) ---
+
+class _RecordingProvider:
+    def __init__(self, content):
+        self.content = content
+        self.calls = []
+
+    def chat(self, messages, tools=None, **kwargs):
+        self.calls.append({"messages": [dict(m) for m in messages], "tools": tools})
+        return {"message": {"content": self.content, "tool_calls": None}}
+
+    def stream(self, messages, **kwargs):
+        yield self.content
+
+
+def test_blocked_turn_uses_advisory_prompt_without_tools(tmp_workspace, mocker):
+    ws.init_workspace()
+    provider = _RecordingProvider("Great work today, time to rest.")
+    mocker.patch("sherpa.interviewer.get_provider", return_value=provider)
+    s = InterviewSession.start("Cache")
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=True)
+
+    reply = s.turn("Let's do the deep dive now.")
+
+    assert reply == "Great work today, time to rest."
+    assert "burnout guard is on" in provider.calls[0]["messages"][0]["content"]
+    assert provider.calls[0]["tools"] is None
+    assert s.last_reply_advisory is True
+    # the stored state prompt is untouched, so the session resumes normally later
+    assert "CLARIFYING" in s.messages[0]["content"]
+
+
+def test_blocked_turn_does_not_advance_state(tmp_workspace, mocker):
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Rest now."))
+    check = mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=True)
+    s = InterviewSession.start("Cache")
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=True)
+
+    s.turn("DAU 10M, QPS 50k, p99 20ms")
+
+    assert s.state == State.CLARIFYING
+    check.assert_not_called()
+
+
+def test_advisory_reply_is_marked_in_ledger_and_survives_resume(tmp_workspace, mocker):
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Rest now."))
+    s = InterviewSession.start("Cache")
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=True)
+
+    s.turn("one more question?")
+
+    text = s.path.read_text()
+    assert re.search(r"^## assistant \S+ advisory$", text, re.MULTILINE)
+    resumed = InterviewSession.resume(s.path)
+    assert [m["content"] for m in resumed.messages[1:]] == ["one more question?", "Rest now."]
+
+
+def test_unblocked_turn_is_not_advisory(tmp_workspace, mocker):
+    ws.init_workspace()
+    provider = _RecordingProvider("What is your DAU?")
+    mocker.patch("sherpa.interviewer.get_provider", return_value=provider)
+    mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=False)
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=False)
+    s = InterviewSession.start("Cache")
+
+    s.turn("Hello")
+
+    assert s.last_reply_advisory is False
+    assert provider.calls[0]["tools"][0]["function"]["name"] == "fetch_full_resume"
+    assert " advisory" not in s.path.read_text()
+
+
+def test_cli_resume_while_blocked_shows_advisory_banner(tmp_workspace, mocker):
+    from click.testing import CliRunner
+    from sherpa.cli import cli
+
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Rest now."))
+    mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=False)
+    InterviewSession.start("Cache")
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=True)
+
+    result = CliRunner().invoke(cli, ["interview"], input="one more?\nquit\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Rest now." in result.output
+    assert "Advisory mode" in result.output
+
+
+def test_cli_new_session_refused_while_blocked(tmp_workspace, mocker):
+    from click.testing import CliRunner
+    from sherpa.cli import cli
+
+    ws.init_workspace()
+    mocker.patch("sherpa.telemetry.is_blocked", return_value=True)
+    mocker.patch("sherpa.telemetry.burnout_status", return_value={"daily_minutes": 200, "threshold": 180, "unblocks_at": None})
+
+    result = CliRunner().invoke(cli, ["interview", "New topic"])
+
+    assert result.exit_code != 0
+    assert "Burnout guard" in result.output

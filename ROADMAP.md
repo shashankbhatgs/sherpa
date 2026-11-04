@@ -19,7 +19,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Tracker (NL extraction, Google Sheets, JSONL fallback) | Done; missing-field follow-up pending (R4) |
 | Outreach (LinkedIn note + cold email) | Done |
 | Interviewer 4-state machine, crash-resilient ledger | Done; code rubric (R2) and question bank (R3) pending |
-| Burnout guard | Blocks new sessions; advisory mode (R1) and tracker telemetry (R5) pending |
+| Burnout guard | Done, including advisory mode; tracker activity in stats (R5) pending |
 | CLI + Streamlit UI | Done |
 
 ---
@@ -29,7 +29,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 Ordered by priority.
 Each item follows `.claude/skills/clean-code/SKILL.md` and is done only when its tests pass and it has been run end to end through `sherpa` and `streamlit run app.py`.
 
-### R1. Burnout advisory mode
+### R1. Burnout advisory mode - Done
 
 **Spec:** Module 4, "Hard State-Shifting".
 When daily active minutes pass the threshold, the persona shifts to an advisory profile that declines new engineering work but stays available for low-stress tracking.

@@ -9,7 +9,7 @@ import click
 import sherpa
 from sherpa.interviewer import InterviewSession, State
 from sherpa.scout import LINKEDIN_NOTE_LIMIT
-from sherpa.telemetry import burnout_status, is_blocked
+from sherpa.telemetry import burnout_status
 from sherpa.tracker import ValidationGap
 from sherpa.workspace import workspace_paths
 
@@ -99,15 +99,9 @@ def interview(topic: str | None) -> None:
 
     If TOPIC is given, starts a new session.
     If omitted, resumes the most recent non-FEEDBACK session from today.
+    While the burnout guard is on, new sessions are refused and a resumed
+    session continues in advisory mode.
     """
-    if is_blocked():
-        status = burnout_status()
-        unblocks = status["unblocks_at"] or "later"
-        raise click.ClickException(
-            f"Burnout guard active: {status['daily_minutes']:.0f}/{status['threshold']} active minutes today. "
-            f"Resume after {unblocks}."
-        )
-
     session: InterviewSession
     if topic:
         try:
@@ -156,6 +150,8 @@ def _repl(session: InterviewSession) -> None:
         response = session.turn(user_input)
 
         click.echo(f"\nInterviewer:\n{response}\n")
+        if session.last_reply_advisory:
+            click.secho("(Advisory mode - burnout guard is on. Time for a break.)\n", fg="yellow")
 
         if session.state != prev_state:
             click.secho(f"--- State advanced: {prev_state.value} → {session.state.value} ---\n", fg="cyan")

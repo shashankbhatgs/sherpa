@@ -38,21 +38,21 @@ with tab_track:
 # ── Interview ──────────────────────────────────────────────────────────────────
 with tab_interview:
     st.header("Mock Interview")
+    st.session_state.setdefault("interview_session", None)
+    st.session_state.setdefault("interview_messages", [])
+    session: InterviewSession | None = st.session_state["interview_session"]
 
-    if is_blocked():
+    blocked = is_blocked()
+    if blocked:
         status = burnout_status()
-        st.error(
-            f"Burnout guard active: {status['daily_minutes']:.0f}/{status['threshold']} active minutes today. "
-            f"Resume after {status['unblocks_at'] or 'later'}."
+        st.warning(
+            f"Burnout guard on: {status['daily_minutes']:.0f}/{status['threshold']} active minutes today. "
+            f"New sessions are paused until {status['unblocks_at'] or 'the cooldown ends'}. "
+            "An open session switches to advisory mode so you can wrap up."
         )
-    else:
-        if "interview_session" not in st.session_state:
-            st.session_state["interview_session"] = None
-            st.session_state["interview_messages"] = []
 
-        session: InterviewSession | None = st.session_state["interview_session"]
-
-        if session is None:
+    if session is None:
+        if not blocked:
             col1, col2 = st.columns([3, 1])
             with col1:
                 topic = st.text_input("Topic", placeholder="Design a distributed cache")
@@ -69,31 +69,35 @@ with tab_interview:
                     st.rerun()
                 except RuntimeError as exc:
                     st.error(str(exc))
-        else:
-            st.caption(f"Session: {session.path.name}  |  State: **{session.state.value}**")
+    else:
+        st.caption(f"Session: {session.path.name}  |  State: **{session.state.value}**")
 
-            for msg in st.session_state["interview_messages"]:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
+        for msg in st.session_state["interview_messages"]:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+                if msg.get("advisory"):
+                    st.caption("Advisory mode - burnout guard is on")
 
-            user_input = st.chat_input("Your response...")
-            if user_input:
-                st.session_state["interview_messages"].append({"role": "user", "content": user_input})
-                with st.spinner("Thinking..."):
-                    try:
-                        response = session.turn(user_input)
-                    except sherpa.ProviderError as exc:
-                        response = None
-                        st.session_state["interview_messages"].pop()
-                        st.error(str(exc))
-                if response is not None:
-                    st.session_state["interview_messages"].append({"role": "assistant", "content": response})
-                    st.rerun()
-
-            if st.button("End Session"):
-                st.session_state["interview_session"] = None
-                st.session_state["interview_messages"] = []
+        user_input = st.chat_input("Your response...")
+        if user_input:
+            st.session_state["interview_messages"].append({"role": "user", "content": user_input})
+            with st.spinner("Thinking..."):
+                try:
+                    response = session.turn(user_input)
+                except sherpa.ProviderError as exc:
+                    response = None
+                    st.session_state["interview_messages"].pop()
+                    st.error(str(exc))
+            if response is not None:
+                st.session_state["interview_messages"].append(
+                    {"role": "assistant", "content": response, "advisory": session.last_reply_advisory}
+                )
                 st.rerun()
+
+        if st.button("End Session"):
+            st.session_state["interview_session"] = None
+            st.session_state["interview_messages"] = []
+            st.rerun()
 
 # ── Scout ──────────────────────────────────────────────────────────────────────
 with tab_scout:
@@ -158,7 +162,7 @@ with tab_stats:
                 except json.JSONDecodeError:
                     pass
             if entries:
-                st.dataframe(entries, use_container_width=True)
+                st.dataframe(entries, width="stretch")
         else:
             st.info("No applications tracked yet.")
     else:
