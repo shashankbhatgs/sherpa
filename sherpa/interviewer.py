@@ -10,6 +10,7 @@ from typing import Optional
 from sherpa.agent_loop import run_tool_loop
 from sherpa.code_review import CodeReview, CodeReviewError, evaluate_code, extract_code
 from sherpa.llm_router import get_provider
+from sherpa.question_bank import Question, QuestionNotFoundError, load_question
 from sherpa.scout import FETCH_RESUME_TOOL, SCOUT_REGISTRY
 from sherpa.workspace import workspace_paths
 
@@ -155,6 +156,16 @@ def _check_exit_criteria(state: State, messages: list[dict]) -> bool:
     return answer.startswith("yes")
 
 
+def _load_question_if_present(name: str | None) -> Question | None:
+    if not name:
+        return None
+    try:
+        return load_question(name)
+    except QuestionNotFoundError:
+        print(f"sherpa interviewer: question {name!r} no longer in the bank; resuming without it", file=sys.stderr)
+        return None
+
+
 class InterviewSession:
     def __init__(
         self,
@@ -163,17 +174,22 @@ class InterviewSession:
         state: State,
         started_at: str,
         messages: list[dict],
+        question: Question | None = None,
     ) -> None:
         self.path = path
         self.topic = topic
         self.state = state
         self.started_at = started_at
         self.messages = messages
+        self.question = question
         self.last_reply_advisory = False
         self.last_review: CodeReview | None = None
 
     @classmethod
-    def start(cls, topic: str) -> "InterviewSession":
+    def start(cls, topic: str | None = None, question: str | None = None) -> "InterviewSession":
+        """Start a session on a free-text topic, or on a question-bank question by name."""
+        if not (topic and topic.strip()) and not question:
+            raise ValueError("Give a topic or a question name.")
         from sherpa.telemetry import is_blocked, burnout_status
         if is_blocked():
             status = burnout_status()
@@ -182,17 +198,19 @@ class InterviewSession:
                 f"Burnout guard: {status['daily_minutes']:.0f} active minutes today "
                 f"(threshold: {status['threshold']} min). Start a new session {when}."
             )
+        loaded = load_question(question) if question else None
+        topic = " ".join((topic or loaded.title).split())  # type: ignore[union-attr]
+
         interviews_dir = workspace_paths()["interviews"]
         interviews_dir.mkdir(parents=True, exist_ok=True)
         date_str = datetime.now().strftime("%Y%m%d")
         started_at = datetime.now().isoformat(timespec="seconds")
         path = _next_session_path(interviews_dir, date_str)
 
-        fm = {"state": State.CLARIFYING.value, "topic": topic, "started_at": started_at}
-        path.write_text(_write_frontmatter(fm))
-
-        messages = [{"role": "system", "content": _STATE_PROMPTS[State.CLARIFYING]}]
-        return cls(path=path, topic=topic, state=State.CLARIFYING, started_at=started_at, messages=messages)
+        session = cls(path=path, topic=topic, state=State.CLARIFYING, started_at=started_at, messages=[], question=loaded)
+        session.messages = [session._system_message()]
+        session._rewrite_frontmatter()
+        return session
 
     @classmethod
     def resume(cls, path: Path) -> "InterviewSession":
@@ -202,11 +220,17 @@ class InterviewSession:
         state = State(fm.get("state", State.CLARIFYING.value))
         topic = fm.get("topic", "")
         started_at = fm.get("started_at", "")
+        question = _load_question_if_present(fm.get("question"))
 
-        turn_messages = _parse_turns(body)
-        messages = [{"role": "system", "content": _STATE_PROMPTS[state]}] + turn_messages
+        session = cls(path=path, topic=topic, state=state, started_at=started_at, messages=[], question=question)
+        session.messages = [session._system_message()] + _parse_turns(body)
+        return session
 
-        return cls(path=path, topic=topic, state=state, started_at=started_at, messages=messages)
+    def _system_message(self) -> dict:
+        content = _STATE_PROMPTS[self.state]
+        if self.question is not None:
+            content += f"\n\nThe interview problem (share details with the candidate only as they ask):\n\n{self.question.text}"
+        return {"role": "system", "content": content}
 
     def turn(self, user_message: str) -> str:
         """Send one candidate message and return the interviewer's reply.
@@ -250,7 +274,7 @@ class InterviewSession:
         if code is None:
             return None
         try:
-            return evaluate_code(code, problem=self.topic)
+            return evaluate_code(code, problem=self.question.text if self.question else self.topic)
         except CodeReviewError as exc:
             print(f"sherpa interviewer: code review skipped ({exc})", file=sys.stderr)
             return None
@@ -268,12 +292,13 @@ class InterviewSession:
         if _check_exit_criteria(self.state, self.messages):
             self.state = next_state
             self._rewrite_frontmatter()
-            self.messages[0] = {"role": "system", "content": _STATE_PROMPTS[self.state]}
+            self.messages[0] = self._system_message()
             return True
         return False
 
     def _rewrite_frontmatter(self) -> None:
-        text = self.path.read_text()
-        _, body = _parse_frontmatter(text)
+        body = _parse_frontmatter(self.path.read_text())[1] if self.path.exists() else ""
         fm = {"state": self.state.value, "topic": self.topic, "started_at": self.started_at}
+        if self.question is not None:
+            fm["question"] = self.question.name
         self.path.write_text(_write_frontmatter(fm) + body)

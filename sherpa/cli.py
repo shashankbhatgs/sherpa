@@ -94,27 +94,38 @@ def outreach(job_file) -> None:
 
 @cli.command()
 @click.argument("topic", required=False)
-def interview(topic: str | None) -> None:
+@click.option("--question", "-q", help="Start on a question-bank question by name (see --list).")
+@click.option("--list", "list_bank", is_flag=True, help="List the question bank and exit.")
+def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
     """Start or resume a mock technical interview.
 
-    If TOPIC is given, starts a new session.
-    If omitted, resumes the most recent non-FEEDBACK session from today.
+    If TOPIC or --question is given, starts a new session.
+    If neither is given, resumes the most recent non-FEEDBACK session from today.
     While the burnout guard is on, new sessions are refused and a resumed
     session continues in advisory mode.
     """
+    if list_bank:
+        questions = sherpa.list_questions()
+        if not questions:
+            raise click.ClickException("The question bank is empty. Run `sherpa init` to seed it.")
+        for q in questions:
+            click.echo(f"  {q.name:28s} {q.title}")
+        return
+
     session: InterviewSession
-    if topic:
+    if topic or question:
         try:
-            session = InterviewSession.start(topic)
-        except RuntimeError as exc:
+            session = InterviewSession.start(topic, question=question)
+        except (RuntimeError, sherpa.QuestionNotFoundError) as exc:
             raise click.ClickException(str(exc)) from exc
         click.secho(f"New session: {session.path.name}", fg="green")
     else:
         session = _resume_latest()
         if session is None:
-            raise click.ClickException("No in-progress session found today. Pass a TOPIC to start one.")
+            raise click.ClickException("No in-progress session found today. Pass a TOPIC or --question to start one.")
         click.secho(f"Resuming: {session.path.name}", fg="cyan")
 
+    click.echo(f"Topic: {session.topic}")
     click.echo(f"State: {session.state.value}\n")
     _repl(session)
 

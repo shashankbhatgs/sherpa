@@ -53,17 +53,26 @@ with tab_interview:
 
     if session is None:
         if not blocked:
+            questions = {q.title: q.name for q in sherpa.list_questions()}
+            custom = "Custom topic"
+            choice = st.selectbox("Question", [custom, *questions], help="Pick from the question bank or type your own.")
             col1, col2 = st.columns([3, 1])
             with col1:
-                topic = st.text_input("Topic", placeholder="Design a distributed cache")
+                topic = st.text_input(
+                    "Topic",
+                    placeholder="Design a distributed cache",
+                    disabled=choice != custom,
+                    value="" if choice == custom else choice,
+                )
             with col2:
                 st.write("")
                 st.write("")
                 start_btn = st.button("Start Session")
 
-            if start_btn and topic.strip():
+            question = questions.get(choice)
+            if start_btn and (question or topic.strip()):
                 try:
-                    session = InterviewSession.start(topic.strip())
+                    session = InterviewSession.start(None if question else topic.strip(), question=question)
                     st.session_state["interview_session"] = session
                     st.session_state["interview_messages"] = []
                     st.rerun()

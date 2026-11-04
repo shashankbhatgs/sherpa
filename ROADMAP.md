@@ -18,7 +18,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Tool loop + Resume Index + `fetch_full_resume` | Done |
 | Tracker (NL extraction, Google Sheets, JSONL fallback) | Done; missing-field follow-up pending (R4) |
 | Outreach (LinkedIn note + cold email) | Done |
-| Interviewer 4-state machine, crash-resilient ledger, code rubric | Done; question bank (R3) and DSA/LLD flow (R6) pending |
+| Interviewer 4-state machine, crash-resilient ledger, code rubric, question bank | Done; DSA/LLD flow (R6) pending |
 | Burnout guard | Done, including advisory mode; tracker activity in stats (R5) pending |
 | CLI + Streamlit UI | Done |
 
@@ -64,7 +64,7 @@ When daily active minutes pass the threshold, the persona shifts to an advisory 
 
 **Done when:** pasting an LRU cache solution in a DSA session produces a scored review that names a real issue (e.g. missing lock, O(n) eviction).
 
-### R3. Use the question bank
+### R3. Use the question bank - Done
 
 **Spec:** Module 3 and the backlog row "Pre-seeded Local MD Templates".
 

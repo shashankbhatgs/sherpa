@@ -4,6 +4,7 @@ from sherpa.llm_router import get_provider, ProviderError
 from sherpa.tracker import track, ValidationGap
 from sherpa.scout import resume_index, fetch_full_resume, draft_outreach, OutreachDraft, OutreachError
 from sherpa.code_review import evaluate_code, CodeReview, CodeReviewError
+from sherpa.question_bank import list_questions, load_question, Question, QuestionNotFoundError
 from sherpa.interviewer import InterviewSession, State
 from sherpa.telemetry import burnout_status, is_blocked, daily_active_minutes
 
@@ -23,6 +24,10 @@ __all__ = [
     "evaluate_code",
     "CodeReview",
     "CodeReviewError",
+    "list_questions",
+    "load_question",
+    "Question",
+    "QuestionNotFoundError",
     "InterviewSession",
     "State",
     "burnout_status",

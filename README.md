@@ -42,6 +42,15 @@ sherpa outreach                    # opens $EDITOR to paste into
 Drafts are saved to `~/.sherpa/outreach/`.
 The same flow is in the Scout tab of the web UI (`streamlit run app.py`).
 
+## Practice from the question bank
+
+```bash
+sherpa interview --list
+sherpa interview -q lld_parking_lot
+```
+
+Add your own questions as Markdown files in `~/.sherpa/question_bank/`; the first `# ` heading is the title.
+
 ## Review code
 
 ```bash
