@@ -334,27 +334,26 @@ def clipboard(mocker, monkeypatch):
     return mocker.patch("sherpa.cli.subprocess.run", return_value=mocker.Mock(returncode=0))
 
 
-def test_cli_copies_email_by_default(workspace, mocker, clipboard):
+def test_cli_copies_linkedin_note_by_default(workspace, mocker, clipboard):
     _use(mocker, FakeProvider([_answer(_draft_json())]))
 
     result = CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
 
     assert result.exit_code == 0, result.output
-    copied = clipboard.call_args.kwargs["input"]
-    assert copied.startswith("Subject: SDE2 Payments - Kafka pipelines at Acme\n\nHi,")
-    assert "Copied the email to your clipboard. For the note: sherpa outreach --last --copy note" in result.output
+    assert clipboard.call_args.kwargs["input"].startswith("Hi! I built Kafka-backed")
+    assert "Copied the note to your clipboard. For the email: sherpa outreach --last --copy email" in result.output
 
 
-def test_cli_last_copies_note_without_calling_model(workspace, mocker, clipboard):
+def test_cli_last_copies_email_without_calling_model(workspace, mocker, clipboard):
     _use(mocker, FakeProvider([_answer(_draft_json())]))
     CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
     provider = _use(mocker, FakeProvider([]))
 
-    result = CliRunner().invoke(cli, ["outreach", "--last", "--copy", "note"])
+    result = CliRunner().invoke(cli, ["outreach", "--last", "--copy", "email"])
 
     assert result.exit_code == 0, result.output
     assert provider.calls == []
-    assert clipboard.call_args.kwargs["input"].startswith("Hi! I built Kafka-backed")
+    assert clipboard.call_args.kwargs["input"].startswith("Subject: SDE2 Payments - Kafka pipelines at Acme\n\nHi,")
 
 
 def test_cli_copy_none_leaves_clipboard_alone(workspace, mocker, clipboard):

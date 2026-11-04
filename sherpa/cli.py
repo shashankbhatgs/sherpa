@@ -74,7 +74,7 @@ def _copy_to_clipboard(text: str) -> bool:
 @cli.command()
 @click.option("--file", "job_file", type=click.File("r"), help="Read the job post from a file.")
 @click.option(
-    "--copy", "copy_part", type=click.Choice(["email", "note", "none"]), default="email", show_default=True,
+    "--copy", "copy_part", type=click.Choice(["note", "email", "none"]), default="note", show_default=True,
     help="Which part to put on the clipboard.",
 )
 @click.option("--last", is_flag=True, help="Show the most recent saved draft instead of writing a new one.")
@@ -82,8 +82,8 @@ def outreach(job_file, copy_part: str, last: bool) -> None:
     """Draft a LinkedIn note and cold email for a job post.
 
     Reads the job post from --file, from stdin (e.g. `pbpaste | sherpa outreach`),
-    or opens your editor so you can paste it. The email is copied to the clipboard;
-    use `sherpa outreach --last --copy note` to copy the LinkedIn note afterwards.
+    or opens your editor so you can paste it. The LinkedIn note is copied to the
+    clipboard; use `sherpa outreach --last --copy email` to copy the email afterwards.
     """
     if last:
         draft = sherpa.latest_outreach()
