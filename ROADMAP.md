@@ -130,8 +130,9 @@ These matter for using Sherpa as a portfolio project.
 - [ ] **Fix the `@claude` GitHub Action.** The `ANTHROPIC_API_KEY` secret (set 2026-06-10) is being rejected. Re-run `/install-github-app` with the Claude subscription option, or replace the secret.
 - [ ] **Make the repo public** once secrets and personal data are confirmed absent from history.
 - [ ] **Add a demo** to the README: a short GIF of `sherpa outreach` and `sherpa interview`, plus a screenshot of the Streamlit UI, since reviewers cannot run it without Claude Code or Ollama.
-- [ ] **Rewrite the README** as a project page: problem, architecture diagram, key design decisions, how AI tools were used to build it.
-- [ ] **Clean up branches and issues:** delete `claude/issue-2-20260610-0714` (stale Phase 1 copy) and the merged `add-claude-github-actions-*` branches; close issue #2 with a link to this roadmap.
+- [x] **Rewrite the README** as a project page: problem, features, quick start, architecture, design decisions.
+- [x] **Clean up branches and issues:** stale and merged branches deleted; issue #2 closed with a link to this roadmap.
+- [x] **GitHub description and topics** set for visitors.
 - [x] **Add CI** that runs `pyflakes` and `pytest` on every push (`.github/workflows/tests.yml`).
 
 ---
