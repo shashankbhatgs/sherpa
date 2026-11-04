@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-94 tests pass. The active focus is maintenance, refinement, and real usage.
+117 tests pass. The active focus is maintenance, refinement, and real usage.
 
 ## Commands
 
@@ -25,7 +25,7 @@ pytest tests/test_config.py::test_hot_reload
 # Bootstrap the workspace
 python -c "from sherpa import init_workspace; print(init_workspace())"
 
-# Smoke-test LLM connection (requires Ollama running with qwen2.5:7b pulled)
+# Smoke-test LLM connection (uses the Claude Code CLI login; falls back to Ollama)
 python -c "from sherpa import get_provider; p = get_provider('default'); print(p.chat([{'role':'user','content':'hello'}])['message']['content'])"
 
 # Run the CLI
@@ -60,7 +60,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 |---|---|
 | `workspace.py` | Idempotent `~/.sherpa/` bootstrap; all path constants live here |
 | `config.py` | Hot-reload JSON config via mtime polling (no background thread) |
-| `llm_router.py` | `LLMProvider` Protocol + `OllamaProvider`; `get_provider(tier)` |
+| `llm_router.py` | `LLMProvider` Protocol; `ClaudeCodeProvider` (primary), `OllamaProvider` (backup), `FallbackProvider`; `get_provider(tier)` |
 | `agent_loop.py` | Generic tool-dispatch loop for function-calling |
 | `tracker.py` | NL → JSON extraction; gspread sheet writer + JSONL fallback |
 | `scout.py` | Resume index (4-line metadata) + on-demand `fetch_full_resume()` tool; `draft_outreach()` cold-message engine |
@@ -74,7 +74,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 
 **Config** (`sherpa/config.py`): reads `~/.sherpa/config.json`, checks `st_mtime` on every `.get()` call, reloads if changed. On `JSONDecodeError` during a mid-write, it keeps the last known-good value and logs to stderr — never crashes callers. Singleton exposed via `get_config()`; tests reset it with `_reset_config()`.
 
-**LLM routing** (`sherpa/llm_router.py`): three named tiers in config — `default`, `extraction`, `interviewer` — so each phase can use a different model without code changes. MVP wires only Ollama (`qwen2.5:7b`). `LLMProvider` is a `Protocol`; cloud providers drop in later without touching callers.
+**LLM routing** (`sherpa/llm_router.py`): three named tiers in config - `default`, `extraction`, `interviewer` - each with a `provider`, `model`, and optional `fallback` spec. The seeded default is Claude Code (`sonnet`, `haiku` for extraction) with Ollama `qwen2.5:7b` as fallback. `ClaudeCodeProvider` runs `claude -p --output-format json` as a subprocess with Claude Code's built-in tools disabled, using the CLI's own login (`claude_code.config_dir` sets `CLAUDE_CONFIG_DIR` to pick an account). Sherpa's tools are described in the system prompt; a reply that is exactly `{"tool_call": {...}}` for a known tool becomes a tool call, so `run_tool_loop()` is backend-agnostic. The CLI exits 0 even when logged out, so errors are detected from the JSON `is_error`/`subtype`. Backend failures raise `ProviderError`; `FallbackProvider` retries on the backup and raises `ProviderError` if both fail. The CLI group and `app.py` turn `ProviderError` into a clean message. `LLMProvider` is a `Protocol`; new providers drop in via `_build_provider()`.
 
 **Agent loop** (`sherpa/agent_loop.py`): `run_tool_loop()` handles the chat → tool_calls → dispatch → append → repeat cycle. `FETCH_RESUME_TOOL` and `SCOUT_REGISTRY` from `scout.py` are the registered tools passed to both the tracker and interviewer. `parse_json_object()` is the shared lenient parser for JSON in LLM output.
 
@@ -109,7 +109,8 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - `tests/conftest.py` provides a `tmp_workspace` fixture: monkeypatches `sherpa.workspace.SHERPA_DIR` to `tmp_path` and resets the config singleton before and after each test.
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
-- 94 tests across 9 modules; full suite runs in ~3 seconds.
+- Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
+- 117 tests across 9 modules; full suite runs in ~3 seconds.
 
 ### Skills
 

@@ -10,11 +10,16 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Requires [Ollama](https://ollama.ai) running locally with `qwen2.5:7b` pulled:
+Sherpa uses the [Claude Code](https://claude.com/claude-code) CLI as its model, through your existing Claude Code login (no API key needed).
+If you have several Claude Code accounts, set `claude_code.config_dir` in `~/.sherpa/config.json` to the one to use (for example `~/.claude-personal`).
+
+[Ollama](https://ollama.ai) is an optional local backup, used only when a Claude Code call fails:
 
 ```bash
 ollama pull qwen2.5:7b
 ```
+
+Each task's model and fallback are set under `model_routing` in `~/.sherpa/config.json`.
 
 ## Bootstrap workspace
 
