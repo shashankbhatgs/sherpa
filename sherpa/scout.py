@@ -96,9 +96,9 @@ that answers "why are you a good fit for this role?" by showing it, not claiming
 appear in BOTH the job post and the resume (e.g. "Backend engineer building Java/Kotlin services on Postgres and AWS")
   * back it with one or two concrete proofs from the resume that match what the job asks for, preferring \
 ownership and measurable impact (e.g. "owned an ingestion pipeline end to end, 300 MB to 3 GB uploads")
-  * every character carries substance: no greetings beyond "Hi", and none of these filler phrases: \
-"strong fit", "great fit", "good fit", "love to be considered", "love to connect", "caught my eye", \
-"excited", "passionate", "I came across"
+  * no dead prose: every phrase must carry a fact the reader did not have. Cut greetings beyond "Hi", \
+self-assessments, and enthusiasm, such as "strong fit", "great fit", "good fit", "love to be considered", \
+"love to connect", "caught my eye", "excited", "passionate", "I came across"
 - email_subject (string): a specific subject line, under 10 words
 - email_body (string): a plain-text email under 150 words. End with this ask, in your own words: {closing_ask}
 
