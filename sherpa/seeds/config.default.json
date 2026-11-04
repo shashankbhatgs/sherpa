@@ -1,9 +1,23 @@
 {
   "ollama_host": "http://localhost:11434",
+  "claude_code": {
+    "command": "claude",
+    "config_dir": null,
+    "timeout_seconds": 180
+  },
   "model_routing": {
-    "default":     {"provider": "ollama", "model": "qwen2.5:7b"},
-    "extraction":  {"provider": "ollama", "model": "qwen2.5:7b"},
-    "interviewer": {"provider": "ollama", "model": "qwen2.5:7b"}
+    "default": {
+      "provider": "claude_code", "model": "sonnet",
+      "fallback": {"provider": "ollama", "model": "qwen2.5:7b"}
+    },
+    "extraction": {
+      "provider": "claude_code", "model": "haiku",
+      "fallback": {"provider": "ollama", "model": "qwen2.5:7b"}
+    },
+    "interviewer": {
+      "provider": "claude_code", "model": "sonnet",
+      "fallback": {"provider": "ollama", "model": "qwen2.5:7b"}
+    }
   },
   "burnout": {
     "daily_minutes_threshold": 180,

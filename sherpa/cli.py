@@ -14,7 +14,17 @@ from sherpa.tracker import ValidationGap
 from sherpa.workspace import workspace_paths
 
 
-@click.group()
+class _SherpaGroup(click.Group):
+    """Turns LLM backend failures into a clean CLI error instead of a traceback."""
+
+    def invoke(self, ctx: click.Context):
+        try:
+            return super().invoke(ctx)
+        except sherpa.ProviderError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+
+@click.group(cls=_SherpaGroup)
 def cli() -> None:
     """Interview Sherpa - local-first SDE2 prep assistant."""
 

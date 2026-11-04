@@ -23,13 +23,17 @@ with tab_track:
     st.header("Track Application")
     text = st.text_area("Describe the application in plain English", placeholder="Applied to Stripe for SDE2 yesterday")
     if st.button("Track", key="track_btn") and text.strip():
-        with st.spinner("Extracting details..."):
-            result = sherpa.track(text)
-        if isinstance(result, ValidationGap):
-            st.warning(f"Missing required fields: {', '.join(result.missing)}. Try adding more detail.")
+        try:
+            with st.spinner("Extracting details..."):
+                result = sherpa.track(text)
+        except sherpa.ProviderError as exc:
+            st.error(str(exc))
         else:
-            st.success("Tracked!")
-            st.json(result)
+            if isinstance(result, ValidationGap):
+                st.warning(f"Missing required fields: {', '.join(result.missing)}. Try adding more detail.")
+            else:
+                st.success("Tracked!")
+                st.json(result)
 
 # ── Interview ──────────────────────────────────────────────────────────────────
 with tab_interview:
@@ -76,9 +80,15 @@ with tab_interview:
             if user_input:
                 st.session_state["interview_messages"].append({"role": "user", "content": user_input})
                 with st.spinner("Thinking..."):
-                    response = session.turn(user_input)
-                st.session_state["interview_messages"].append({"role": "assistant", "content": response})
-                st.rerun()
+                    try:
+                        response = session.turn(user_input)
+                    except sherpa.ProviderError as exc:
+                        response = None
+                        st.session_state["interview_messages"].pop()
+                        st.error(str(exc))
+                if response is not None:
+                    st.session_state["interview_messages"].append({"role": "assistant", "content": response})
+                    st.rerun()
 
             if st.button("End Session"):
                 st.session_state["interview_session"] = None
@@ -97,7 +107,7 @@ with tab_scout:
         with st.spinner("Reading the job post and drafting..."):
             try:
                 st.session_state["outreach_draft"] = sherpa.draft_outreach(job_post)
-            except sherpa.OutreachError as exc:
+            except (sherpa.OutreachError, sherpa.ProviderError) as exc:
                 st.session_state["outreach_draft"] = None
                 st.error(str(exc))
 

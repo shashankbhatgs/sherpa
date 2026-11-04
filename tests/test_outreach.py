@@ -227,3 +227,17 @@ def test_cli_model_failure_is_reported(workspace, mocker):
 
     assert result.exit_code != 0
     assert "did not return" in result.output
+
+
+def test_cli_backend_failure_is_a_clean_error(workspace, mocker):
+    from sherpa.llm_router import ProviderError
+
+    failing = mocker.MagicMock()
+    failing.chat.side_effect = ProviderError("Claude Code CLI not found. Backup model also failed: refused")
+    _use(mocker, failing)
+
+    result = CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
+
+    assert result.exit_code == 1
+    assert "Error: Claude Code CLI not found" in result.output
+    assert "Traceback" not in result.output

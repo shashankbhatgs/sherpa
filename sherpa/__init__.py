@@ -1,6 +1,6 @@
 from sherpa.workspace import init_workspace
 from sherpa.config import get_config, _reset_config
-from sherpa.llm_router import get_provider
+from sherpa.llm_router import get_provider, ProviderError
 from sherpa.tracker import track, ValidationGap
 from sherpa.scout import resume_index, fetch_full_resume, draft_outreach, OutreachDraft, OutreachError
 from sherpa.interviewer import InterviewSession, State
@@ -10,6 +10,7 @@ __all__ = [
     "init_workspace",
     "get_config",
     "get_provider",
+    "ProviderError",
     "_reset_config",
     "track",
     "ValidationGap",
