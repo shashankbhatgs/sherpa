@@ -374,3 +374,14 @@ def test_cli_last_without_drafts_errors(workspace):
     result = CliRunner().invoke(cli, ["outreach", "--last"])
     assert result.exit_code != 0
     assert "No saved outreach drafts" in result.output
+
+
+def test_note_prompt_asks_for_fit_evidence_not_filler(workspace, mocker):
+    provider = _use(mocker, FakeProvider([_answer(_draft_json())]))
+
+    draft_outreach(JOB_POST)
+
+    system = provider.calls[0]["messages"][0]["content"]
+    assert 'answers "why are you a good fit for this role?"' in system
+    assert "BOTH the job post and the resume" in system
+    assert '"strong fit"' in system and '"love to be considered"' in system
