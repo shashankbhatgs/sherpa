@@ -1,17 +1,13 @@
 """Streamlit UI for Interview Sherpa. Run with: streamlit run app.py"""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import streamlit as st
 
 import sherpa
-from sherpa.interviewer import InterviewSession, State
+from sherpa.interviewer import InterviewSession
 from sherpa.scout import LINKEDIN_NOTE_LIMIT
 from sherpa.telemetry import burnout_status, is_blocked
 from sherpa.tracker import ValidationGap
-from sherpa.workspace import workspace_paths
 
 st.set_page_config(page_title="Interview Sherpa", layout="wide")
 st.title("Interview Sherpa")
@@ -192,20 +188,16 @@ with tab_stats:
     if status["blocked"]:
         st.error(f"Cooldown active. Unblocks at: {status['unblocks_at']}")
 
+    today = sherpa.daily_activity()
+    st.subheader("Today")
+    col1, col2 = st.columns(2)
+    col1.metric("Applications tracked", today.applications)
+    col2.metric("Outreach drafts", today.outreach_drafts)
+    st.caption("Only interview minutes count toward the burnout limit. Tracking and outreach are always open.")
+
     st.subheader("Recent Applications")
-    apps_path = workspace_paths()["applications"]
-    if apps_path.exists():
-        lines = [l for l in apps_path.read_text().splitlines() if l.strip()]
-        if lines:
-            entries = []
-            for line in lines[-20:]:
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
-            if entries:
-                st.dataframe(entries, width="stretch")
-        else:
-            st.info("No applications tracked yet.")
+    entries = sherpa.load_applications()[-20:]
+    if entries:
+        st.dataframe(list(reversed(entries)), width="stretch")
     else:
         st.info("No applications tracked yet.")

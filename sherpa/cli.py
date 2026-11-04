@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 import click
 
@@ -11,7 +10,6 @@ from sherpa.interviewer import InterviewSession, State
 from sherpa.scout import LINKEDIN_NOTE_LIMIT
 from sherpa.telemetry import burnout_status
 from sherpa.tracker import ValidationGap
-from sherpa.workspace import workspace_paths
 
 
 class _SherpaGroup(click.Group):
@@ -126,7 +124,7 @@ def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
             raise click.ClickException(str(exc)) from exc
         click.secho(f"New session: {session.path.name}", fg="green")
     else:
-        session = _resume_latest()
+        session = InterviewSession.latest_open()
         if session is None:
             raise click.ClickException("No in-progress session found today. Pass a TOPIC or --question to start one.")
         click.secho(f"Resuming: {session.path.name}", fg="cyan")
@@ -134,21 +132,6 @@ def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
     click.echo(f"Topic: {session.topic}")
     click.echo(f"State: {session.state.value}\n")
     _repl(session)
-
-
-def _resume_latest() -> InterviewSession | None:
-    from datetime import datetime
-    date_str = datetime.now().strftime("%Y%m%d")
-    interviews_dir = workspace_paths()["interviews"]
-    candidates = sorted(interviews_dir.glob(f"session_{date_str}_*.md"), reverse=True)
-    for path in candidates:
-        try:
-            s = InterviewSession.resume(path)
-            if s.state != State.FEEDBACK:
-                return s
-        except Exception:
-            continue
-    return None
 
 
 _FENCE = "```"
@@ -232,8 +215,8 @@ def stats() -> None:
         remaining = threshold - minutes
         click.secho(f"OK - {remaining:.1f} minutes remaining today.", fg="green")
 
-    apps_path = workspace_paths()["applications"]
-    app_count = 0
-    if apps_path.exists():
-        app_count = sum(1 for line in apps_path.read_text().splitlines() if line.strip())
-    click.echo(f"Applications tracked : {app_count}")
+    today = sherpa.daily_activity()
+    click.echo("\nToday (only interview minutes count toward the limit):")
+    click.echo(f"  Applications tracked : {today.applications}")
+    click.echo(f"  Outreach drafts      : {today.outreach_drafts}")
+    click.echo(f"\nApplications tracked (all time): {len(sherpa.load_applications())}")

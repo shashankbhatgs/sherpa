@@ -1,4 +1,3 @@
-import pytest
 from sherpa.agent_loop import run_tool_loop
 
 

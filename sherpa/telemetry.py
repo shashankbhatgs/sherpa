@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sherpa.config import get_config
@@ -67,6 +68,28 @@ def _last_turn_timestamp() -> datetime | None:
         except Exception:
             pass
     return latest
+
+
+@dataclass
+class DailyActivity:
+    interview_minutes: float
+    applications: int
+    outreach_drafts: int
+
+
+def daily_activity(day: date | None = None) -> DailyActivity:
+    """Today's (or `day`'s) activity. Only interview minutes count toward the burnout threshold."""
+    from sherpa.tracker import load_applications  # lazy: tracker pulls in the LLM stack
+
+    day = day or date.today()
+    outreach_dir = workspace_paths()["outreach"]
+    drafts = len(list(outreach_dir.glob(f"outreach_{day:%Y%m%d}_*.md"))) if outreach_dir.exists() else 0
+    applications = sum(1 for e in load_applications() if str(e.get("tracked_at", "")).startswith(day.isoformat()))
+    return DailyActivity(
+        interview_minutes=daily_active_minutes(f"{day:%Y%m%d}"),
+        applications=applications,
+        outreach_drafts=drafts,
+    )
 
 
 def burnout_status() -> dict:

@@ -19,7 +19,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Tracker (NL extraction, Google Sheets, JSONL fallback, missing-field follow-up) | Done |
 | Outreach (LinkedIn note + cold email) | Done |
 | Interviewer 4-state machine, crash-resilient ledger, code rubric, question bank | Done; DSA/LLD flow (R6) pending |
-| Burnout guard | Done, including advisory mode; tracker activity in stats (R5) pending |
+| Burnout guard and stats | Done, including advisory mode and daily activity |
 | CLI + Streamlit UI | Done |
 
 ---
@@ -96,7 +96,7 @@ When daily active minutes pass the threshold, the persona shifts to an advisory 
 
 **Done when:** "applied somewhere today" leads to one question ("Which company?") and a single correct row.
 
-### R5. Count tracker activity in telemetry
+### R5. Count tracker activity in telemetry - Done (shown in stats, not counted toward the limit)
 
 **Plan:** `PLAN.md` Phase 4 says telemetry walks interviews "and tracker events".
 

@@ -3,7 +3,7 @@ import sherpa.workspace as ws
 
 
 def test_init_creates_tree(tmp_workspace):
-    result = ws.init_workspace()
+    ws.init_workspace()
     assert (tmp_workspace).is_dir()
     assert (tmp_workspace / "interviews").is_dir()
     assert (tmp_workspace / "outreach").is_dir()

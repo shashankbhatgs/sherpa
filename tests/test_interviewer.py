@@ -1,14 +1,11 @@
 import re
-import pytest
 import sherpa.workspace as ws
 from sherpa.interviewer import (
     InterviewSession,
     State,
-    _NEXT_STATE,
     _next_session_path,
     _parse_frontmatter,
     _parse_turns,
-    _write_frontmatter,
 )
 
 
@@ -372,3 +369,34 @@ def test_cli_new_session_refused_while_blocked(tmp_workspace, mocker):
 
     assert result.exit_code != 0
     assert "Burnout guard" in result.output
+
+
+# --- latest_open ---
+
+def _session_file(workspace, n, state):
+    from datetime import datetime as _dt
+    path = workspace / "interviews" / f"session_{_dt.now():%Y%m%d}_{n}.md"
+    path.write_text(f"---\nstate: {state}\ntopic: T{n}\nstarted_at: x\n---\n")
+    return path
+
+
+def test_latest_open_sorts_numerically_and_skips_finished(tmp_workspace):
+    ws.init_workspace()
+    _session_file(tmp_workspace, 9, "CLARIFYING")
+    _session_file(tmp_workspace, 10, "HIGH_LEVEL")
+    _session_file(tmp_workspace, 11, "FEEDBACK")
+
+    assert InterviewSession.latest_open().topic == "T10"
+
+
+def test_latest_open_skips_unreadable_session(tmp_workspace, capsys):
+    ws.init_workspace()
+    _session_file(tmp_workspace, 1, "CLARIFYING")
+    _session_file(tmp_workspace, 2, "NOT_A_STATE")
+
+    assert InterviewSession.latest_open().topic == "T1"
+    assert "skipping unreadable session" in capsys.readouterr().err
+
+
+def test_latest_open_none_when_no_sessions(tmp_workspace):
+    assert InterviewSession.latest_open() is None

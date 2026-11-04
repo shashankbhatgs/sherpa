@@ -1,5 +1,4 @@
 import json
-import time
 import sherpa.workspace as ws
 from sherpa.config import Config, get_config, _reset_config
 

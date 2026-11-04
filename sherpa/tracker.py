@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
-from datetime import date
-from pathlib import Path
+from datetime import date, datetime
 
 from sherpa.agent_loop import parse_json_object, run_tool_loop
 from sherpa.config import get_config
@@ -72,17 +71,33 @@ def _record(raw_entry: dict) -> dict | ValidationGap:
     if missing:
         return ValidationGap(missing=missing, partial=entry)
     entry.setdefault("date", date.today().isoformat())
+    entry["tracked_at"] = datetime.now().isoformat(timespec="seconds")
 
+    # The local ledger is the source of truth (stats read it); the sheet is a mirror.
+    _append_jsonl(entry)
     sheet = _get_sheet()
     if sheet is not None:
         try:
             _append_sheet(sheet, entry)
-            return entry
         except Exception as exc:
-            print(f"sherpa tracker: sheet write failed ({exc}), falling back to JSONL", file=sys.stderr)
-
-    _append_jsonl(entry)
+            print(f"sherpa tracker: sheet write failed ({exc}); saved locally only", file=sys.stderr)
     return entry
+
+
+def load_applications() -> list[dict]:
+    """All entries in the local ledger, oldest first; malformed lines are skipped."""
+    path = workspace_paths()["applications"]
+    if not path.exists():
+        return []
+    entries = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict):
+            entries.append(entry)
+    return entries
 
 
 def _normalize(raw: dict) -> dict:

@@ -223,3 +223,38 @@ def test_placeholder_company_counts_as_missing(tmp_workspace, mocker, placeholde
     assert isinstance(gap, ValidationGap)
     assert gap.missing == ["company"]
     assert "company" not in gap.partial
+
+
+# --- local ledger ---
+
+from sherpa.tracker import load_applications
+
+
+def test_entries_get_tracked_at(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme", "state": "applied"}')
+    mocker.patch("sherpa.tracker.get_provider")
+    assert track("Acme")["tracked_at"][:4].isdigit()
+
+
+def test_sheet_success_still_writes_local_ledger(tmp_workspace, mocker):
+    ws.init_workspace()
+    _mock_run_tool_loop(mocker, '{"company": "Acme", "state": "applied"}')
+    mocker.patch("sherpa.tracker.get_provider")
+    sheet = mocker.MagicMock()
+    mocker.patch("sherpa.tracker._get_sheet", return_value=sheet)
+
+    track("Acme")
+
+    sheet.append_row.assert_called_once()
+    assert _lines(tmp_workspace)[0]["company"] == "Acme"
+
+
+def test_load_applications_skips_bad_lines(tmp_workspace):
+    ws.init_workspace()
+    (tmp_workspace / "applications.jsonl").write_text('{"company": "A"}\nnot json\n[1, 2]\n\n{"company": "B"}\n')
+    assert [e["company"] for e in load_applications()] == ["A", "B"]
+
+
+def test_load_applications_without_file(tmp_workspace):
+    assert load_applications() == []

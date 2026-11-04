@@ -1,7 +1,6 @@
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 import sherpa.workspace as ws
-from sherpa.telemetry import daily_active_minutes, burnout_status, is_blocked, _session_minutes
+from sherpa.telemetry import daily_active_minutes, burnout_status, is_blocked
 
 
 def _make_session(tmp_workspace, date_str: str, n: int, turns: list[str]) -> None:
@@ -143,3 +142,63 @@ def test_burnout_respects_config_threshold(tmp_workspace, monkeypatch):
     status = burnout_status()
     assert status["threshold"] == 5
     assert status["blocked"] is True
+
+
+# --- daily_activity ---
+
+from datetime import date, timedelta as _td
+
+from click.testing import CliRunner
+
+from sherpa.cli import cli
+from sherpa.telemetry import daily_activity
+
+
+def _write_apps(workspace, *tracked_at):
+    lines = [f'{{"company": "C{i}", "state": "applied", "tracked_at": "{ts}"}}' for i, ts in enumerate(tracked_at)]
+    (workspace / "applications.jsonl").write_text("\n".join(lines + ["not json"]) + "\n")
+
+
+def test_daily_activity_counts_today_only(tmp_workspace, mocker):
+    ws.init_workspace()
+    today, yesterday = date.today(), date.today() - _td(days=1)
+    _write_apps(tmp_workspace, f"{today}T09:00:00", f"{today}T18:30:00", f"{yesterday}T10:00:00")
+    for name in (f"outreach_{today:%Y%m%d}_1.md", f"outreach_{today:%Y%m%d}_2.md", f"outreach_{yesterday:%Y%m%d}_1.md"):
+        (tmp_workspace / "outreach" / name).write_text("x")
+    mocker.patch("sherpa.telemetry.daily_active_minutes", return_value=42.0)
+
+    activity = daily_activity()
+
+    assert activity.applications == 2
+    assert activity.outreach_drafts == 2
+    assert activity.interview_minutes == 42.0
+
+
+def test_daily_activity_for_a_given_day(tmp_workspace):
+    ws.init_workspace()
+    yesterday = date.today() - _td(days=1)
+    _write_apps(tmp_workspace, f"{yesterday}T10:00:00")
+    assert daily_activity(yesterday).applications == 1
+
+
+def test_daily_activity_empty_workspace(tmp_workspace):
+    activity = daily_activity()
+    assert (activity.applications, activity.outreach_drafts, activity.interview_minutes) == (0, 0, 0.0)
+
+
+def test_tracker_activity_does_not_trip_burnout(tmp_workspace):
+    ws.init_workspace()
+    _write_apps(tmp_workspace, *[f"{date.today()}T{h:02d}:00:00" for h in range(24)])
+    assert is_blocked() is False
+
+
+def test_cli_stats_shows_today_breakdown(tmp_workspace):
+    ws.init_workspace()
+    _write_apps(tmp_workspace, f"{date.today()}T09:00:00")
+
+    result = CliRunner().invoke(cli, ["stats"])
+
+    assert result.exit_code == 0, result.output
+    assert "Applications tracked : 1" in result.output
+    assert "Outreach drafts      : 0" in result.output
+    assert "Applications tracked (all time): 1" in result.output

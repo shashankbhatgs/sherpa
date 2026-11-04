@@ -156,6 +156,11 @@ def _check_exit_criteria(state: State, messages: list[dict]) -> bool:
     return answer.startswith("yes")
 
 
+def _session_number(path: Path) -> int:
+    suffix = path.stem.rsplit("_", 1)[-1]
+    return int(suffix) if suffix.isdigit() else 0
+
+
 def _load_question_if_present(name: str | None) -> Question | None:
     if not name:
         return None
@@ -225,6 +230,22 @@ class InterviewSession:
         session = cls(path=path, topic=topic, state=state, started_at=started_at, messages=[], question=question)
         session.messages = [session._system_message()] + _parse_turns(body)
         return session
+
+    @classmethod
+    def latest_open(cls) -> "InterviewSession | None":
+        """The most recent session from today that has not reached FEEDBACK, if any."""
+        interviews_dir = workspace_paths()["interviews"]
+        date_str = datetime.now().strftime("%Y%m%d")
+        paths = interviews_dir.glob(f"session_{date_str}_*.md") if interviews_dir.exists() else []
+        for path in sorted(paths, key=_session_number, reverse=True):
+            try:
+                session = cls.resume(path)
+            except (OSError, ValueError) as exc:
+                print(f"sherpa interviewer: skipping unreadable session {path.name} ({exc})", file=sys.stderr)
+                continue
+            if session.state != State.FEEDBACK:
+                return session
+        return None
 
     def _system_message(self) -> dict:
         content = _STATE_PROMPTS[self.state]
