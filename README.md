@@ -33,7 +33,8 @@ Time: get O(n), put O(n) | Space: O(capacity)
 ```
 
 **Application tracking from one sentence.**
-Write `"Applied to Stripe for SDE2 via a referral from Priya"` and it becomes a structured row (company, role, status, date, notes) in a local file and, optionally, a Google Sheet.
+Write `"Asked Ankur Raj for a referral at Navi for SDE 2, job NTL-7133"` and it becomes a structured row (company, role, stage, status, contact, job ID, link, date) in a local file and, optionally, your existing Google Sheet.
+Stages, statuses, column names, and the date format are all set in config, so it adapts to the sheet you already keep.
 If something essential is missing, it asks for just that field instead of guessing.
 
 **Tailored outreach.**
@@ -96,6 +97,7 @@ Each task (drafting, extraction, interviewing) picks its own model in `~/.sherpa
 
 If you use several Claude Code accounts, set `claude_code.config_dir` to the one Sherpa should use.
 To mirror applications to Google Sheets, put a service-account key at `~/.sherpa/credentials.json`, share the sheet with that account, and set `tracker.spreadsheet_url`.
+Rows are placed by matching your row-1 headers to `tracker.columns`, so column order does not matter.
 
 ## How it works
 

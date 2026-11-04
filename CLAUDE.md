@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-212 tests pass. The active focus is maintenance, refinement, and real usage.
+218 tests pass. The active focus is maintenance, refinement, and real usage.
 Remaining work and its implementation plan live in `ROADMAP.md`.
 
 ## Code Standards
@@ -81,7 +81,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 | `telemetry.py` | Per-day active-minute tallying; burnout circuit breaker; `daily_activity()` (interview minutes, applications, outreach drafts) |
 
 `sherpa/__init__.py` re-exports all public API — callers import from the package, never from sub-modules directly:
-`init_workspace`, `get_config`, `get_provider`, `track`, `complete_track`, `load_applications`, `ValidationGap`, `VALID_STATES`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `latest_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`, `daily_activity`, `DailyActivity`.
+`init_workspace`, `get_config`, `get_provider`, `track`, `complete_track`, `load_applications`, `ValidationGap`, `application_stages`, `application_statuses`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `latest_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`, `daily_activity`, `DailyActivity`.
 
 ### Key design decisions
 
@@ -95,7 +95,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 
 **Interviewer state machine** (`sherpa/interviewer.py`): session state lives in YAML front-matter of `~/.sherpa/interviews/session_YYYYMMDD_N.md`. Turn blocks are written as `## role TIMESTAMP\ncontent`. Crash-resilient: `resume()` parses front-matter for state and replays markdown turns into the LLM's `messages` list. `start(topic=None, question=None)` checks the burnout circuit breaker before creating a session. With `question`, the bank file's text is appended to every state's system prompt (`_system_message()`), the name is stored as `question:` in front-matter, and `resume()` reloads it (a deleted file is logged and skipped).
 
-**Tracker validation** (`sherpa/tracker.py`): extraction output goes through `_normalize()` - known string fields only, whitespace collapsed, placeholder values ("Unknown", "N/A") dropped, state mapped onto `VALID_STATES` or dropped - and a missing date defaults to today. Missing `company`/`state` returns `ValidationGap(missing, partial)` without writing; the CLI prompts for just those fields (state as a choice) and the Track tab shows a form, both finishing with `complete_track(partial, answers)`. Every recorded entry gets `tracked_at` and is always appended to `applications.jsonl` (the source of truth for stats); Google Sheets is a mirror. `load_applications()` reads the ledger, skipping malformed lines.
+**Tracker model** (`sherpa/tracker.py`): mirrors the user's Google Sheet. An entry has a pipeline `stage` (required) and an optional `status` (outcome/referral), plus `company` (required), `role`, `contact`, `job_id`, `link`, `date` (ISO internally), `notes`. Stage/status vocabularies, sheet column headers, and the sheet date format come from `config.tracker` (`stages`, `statuses`, `columns`, `date_format`; defaults in `DEFAULT_*`). The extraction prompt lists the labels and today's date; `_normalize()` keeps known string fields, drops placeholders ("Unknown", "N/A"), and snaps stage/status onto the allowed labels (case, spacing, hyphens, curly apostrophes ignored) or drops them. Missing `company`/`stage` returns `ValidationGap(missing, partial)` without writing; the CLI prompts for those (stage as a choice) and the Track tab shows a form, both finishing with `complete_track()`. Every entry gets `tracked_at` and is appended to `applications.jsonl` first (source of truth for stats); the sheet row is then built by matching row-1 header names (order-independent, unknown headers left blank) and appended with `USER_ENTERED`. `load_applications()` reads the ledger, skipping malformed lines.
 
 **Burnout guard** (`sherpa/telemetry.py`): parses ISO timestamps from turn headers to sum daily active minutes. Gaps ≥10 min between turns are excluded (idle time). When `config.burnout.daily_minutes_threshold` is exceeded, `is_blocked()` returns True and `InterviewSession.start()` raises `RuntimeError`. An open session keeps working in advisory mode: `turn()` swaps in `_PROMPT_ADVISORY` for that call (no tools, no state advance), sets `last_reply_advisory`, and marks the turn header `## assistant TS advisory`. Tracker and outreach always pass through.
 
@@ -127,7 +127,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
 - Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
-- 212 tests across 11 modules; full suite runs in ~3 seconds.
+- 218 tests across 11 modules; full suite runs in ~3 seconds.
 
 ### Skills
 
