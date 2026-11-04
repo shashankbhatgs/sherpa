@@ -28,6 +28,9 @@ pytest tests/test_config.py
 # Run a single test by name
 pytest tests/test_config.py::test_hot_reload
 
+# Lint (CI runs this and pytest on every push: .github/workflows/tests.yml)
+python -m pyflakes sherpa app.py tests
+
 # Bootstrap the workspace
 python -c "from sherpa import init_workspace; print(init_workspace())"
 

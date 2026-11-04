@@ -19,6 +19,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-mock",
+    "pyflakes",
 ]
 
 [project.scripts]

@@ -132,7 +132,7 @@ These matter for using Sherpa as a portfolio project.
 - [ ] **Add a demo** to the README: a short GIF of `sherpa outreach` and `sherpa interview`, plus a screenshot of the Streamlit UI, since reviewers cannot run it without Claude Code or Ollama.
 - [ ] **Rewrite the README** as a project page: problem, architecture diagram, key design decisions, how AI tools were used to build it.
 - [ ] **Clean up branches and issues:** delete `claude/issue-2-20260610-0714` (stale Phase 1 copy) and the merged `add-claude-github-actions-*` branches; close issue #2 with a link to this roadmap.
-- [ ] **Add CI** that runs `pytest` on every push.
+- [x] **Add CI** that runs `pyflakes` and `pytest` on every push (`.github/workflows/tests.yml`).
 
 ---
 
