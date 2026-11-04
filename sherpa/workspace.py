@@ -7,7 +7,7 @@ from pathlib import Path
 
 SHERPA_DIR: Path = Path.home() / ".sherpa"
 
-_USER_DATA = {"applications.jsonl", "interviews", "credentials.json"}
+_USER_DATA = {"applications.jsonl", "interviews", "outreach", "credentials.json"}
 
 
 def workspace_paths() -> dict[str, Path]:
@@ -18,6 +18,7 @@ def workspace_paths() -> dict[str, Path]:
         "resume": SHERPA_DIR / "resume.md",
         "applications": SHERPA_DIR / "applications.jsonl",
         "interviews": SHERPA_DIR / "interviews",
+        "outreach": SHERPA_DIR / "outreach",
         "question_bank": SHERPA_DIR / "question_bank",
         "credentials": SHERPA_DIR / "credentials.json",
     }
@@ -29,6 +30,7 @@ def init_workspace(force: bool = False) -> dict[str, str]:
 
     paths["root"].mkdir(exist_ok=True)
     paths["interviews"].mkdir(exist_ok=True)
+    paths["outreach"].mkdir(exist_ok=True)
     paths["question_bank"].mkdir(exist_ok=True)
 
     seeds_pkg = files("sherpa.seeds")

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Callable
 
+from sherpa.agent_loop import parse_json_object, run_tool_loop
+from sherpa.llm_router import get_provider
 from sherpa.workspace import workspace_paths
 
 
@@ -44,3 +49,162 @@ FETCH_RESUME_TOOL: dict = {
 SCOUT_REGISTRY: dict[str, Callable] = {
     "fetch_full_resume": fetch_full_resume,
 }
+
+
+# ── Outreach engine ───────────────────────────────────────────────────────────
+
+LINKEDIN_NOTE_LIMIT = 300
+
+_OUTREACH_PROMPT = """\
+You write short, specific cold outreach messages for a software engineer who is job hunting.
+
+Candidate summary (Resume Index):
+{index}
+
+Steps:
+1. Read the job post. Decide whether the role aligns with the candidate's competencies and target roles.
+2. If it aligns, call the fetch_full_resume tool and ground the message in concrete projects from the resume \
+that match the job's requirements.
+3. Never invent employers, projects, skills, or metrics that are not in the summary or the resume.
+
+Return ONLY a JSON object with these keys:
+- company (string): the hiring company
+- role (string): the job title
+- aligned (boolean): true if the role fits the candidate
+- linkedin_note (string): a LinkedIn connection note, at most {limit} characters
+- email_subject (string): a specific subject line, under 10 words
+- email_body (string): a plain-text email under 150 words that ends with one clear ask
+
+No markdown fences, no explanation."""
+
+_SHORTEN_PROMPT = (
+    "The linkedin_note is {length} characters. Rewrite it to at most {limit} characters, "
+    "keeping the most specific point. Return the same JSON object with only linkedin_note changed."
+)
+
+
+class OutreachError(RuntimeError):
+    """The model did not return a usable outreach draft."""
+
+
+@dataclass
+class OutreachDraft:
+    company: str
+    role: str
+    aligned: bool
+    used_full_resume: bool
+    linkedin_note: str
+    email_subject: str
+    email_body: str
+    path: Path
+
+
+def draft_outreach(job_post: str) -> OutreachDraft:
+    """Draft a LinkedIn note and cold email for a pasted job post, and save it to ~/.sherpa/outreach/.
+
+    The model only sees the Resume Index up front; it pulls the full resume through the
+    fetch_full_resume tool when it judges the role a match.
+    """
+    job_post = job_post.strip()
+    if not job_post:
+        raise ValueError("Job post is empty.")
+
+    fetched: list[bool] = []
+
+    def _tracked_fetch() -> str:
+        fetched.append(True)
+        return fetch_full_resume()
+
+    provider = get_provider("default")
+    messages = [
+        {"role": "system", "content": _OUTREACH_PROMPT.format(index=resume_index(), limit=LINKEDIN_NOTE_LIMIT)},
+        {"role": "user", "content": f"Job post:\n\n{job_post}"},
+    ]
+    raw = run_tool_loop(
+        provider=provider,
+        messages=messages,
+        tools=[FETCH_RESUME_TOOL],
+        registry={"fetch_full_resume": _tracked_fetch},
+    )
+    data = parse_json_object(raw)
+
+    note = _text(data, "linkedin_note")
+    if len(note) > LINKEDIN_NOTE_LIMIT:
+        retry_messages = messages + [
+            {"role": "assistant", "content": raw},
+            {"role": "user", "content": _SHORTEN_PROMPT.format(length=len(note), limit=LINKEDIN_NOTE_LIMIT)},
+        ]
+        retry = parse_json_object(run_tool_loop(provider=provider, messages=retry_messages, tools=[], registry={}))
+        shorter = _text(retry, "linkedin_note")
+        if shorter and len(shorter) < len(note):
+            note = shorter
+        note = _trim_to_limit(note, LINKEDIN_NOTE_LIMIT)
+
+    email_body = _text(data, "email_body")
+    if not note or not email_body:
+        raise OutreachError("The model did not return a LinkedIn note and email. Try again.")
+
+    company = _text(data, "company") or "Unknown company"
+    draft = OutreachDraft(
+        company=company,
+        role=_text(data, "role"),
+        aligned=data.get("aligned") is True,
+        used_full_resume=bool(fetched),
+        linkedin_note=note,
+        email_subject=_text(data, "email_subject") or f"Interest in the role at {company}",
+        email_body=email_body,
+        path=_next_outreach_path(),
+    )
+    _write_outreach(draft, job_post)
+    return draft
+
+
+def _text(data: dict, key: str) -> str:
+    value = data.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _trim_to_limit(text: str, limit: int) -> str:
+    """Cut text to at most `limit` chars, preferring a sentence end, then a word boundary."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    sentence_end = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if sentence_end >= limit // 2:
+        return head[: sentence_end + 1]
+    if text[limit] in " \n":
+        return head.rstrip()
+    word_end = head.rfind(" ")
+    return head[:word_end].rstrip(" ,;:-") if word_end > 0 else head
+
+
+def _next_outreach_path() -> Path:
+    outreach_dir = workspace_paths()["outreach"]
+    outreach_dir.mkdir(parents=True, exist_ok=True)
+    date_str = datetime.now().strftime("%Y%m%d")
+    taken = [
+        int(p.stem.rsplit("_", 1)[1])
+        for p in outreach_dir.glob(f"outreach_{date_str}_*.md")
+        if p.stem.rsplit("_", 1)[1].isdigit()
+    ]
+    return outreach_dir / f"outreach_{date_str}_{max(taken, default=0) + 1}.md"
+
+
+def _one_line(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _write_outreach(draft: OutreachDraft, job_post: str) -> None:
+    content = (
+        "---\n"
+        f"company: {_one_line(draft.company)}\n"
+        f"role: {_one_line(draft.role)}\n"
+        f"aligned: {str(draft.aligned).lower()}\n"
+        f"used_full_resume: {str(draft.used_full_resume).lower()}\n"
+        f"created_at: {datetime.now().isoformat(timespec='seconds')}\n"
+        "---\n\n"
+        f"## LinkedIn note\n\n{draft.linkedin_note}\n\n"
+        f"## Email\n\nSubject: {_one_line(draft.email_subject)}\n\n{draft.email_body}\n\n"
+        f"## Job post\n\n{job_post}\n"
+    )
+    draft.path.write_text(content, encoding="utf-8")

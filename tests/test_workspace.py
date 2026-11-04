@@ -6,6 +6,7 @@ def test_init_creates_tree(tmp_workspace):
     result = ws.init_workspace()
     assert (tmp_workspace).is_dir()
     assert (tmp_workspace / "interviews").is_dir()
+    assert (tmp_workspace / "outreach").is_dir()
     assert (tmp_workspace / "question_bank").is_dir()
     assert (tmp_workspace / "config.json").is_file()
     assert (tmp_workspace / "profile.json").is_file()
@@ -46,6 +47,6 @@ def test_force_never_touches_user_data(tmp_workspace):
 
 def test_workspace_paths_keys(tmp_workspace):
     paths = ws.workspace_paths()
-    for key in ["root", "config", "profile", "resume", "applications", "interviews", "question_bank", "credentials"]:
+    for key in ["root", "config", "profile", "resume", "applications", "interviews", "outreach", "question_bank", "credentials"]:
         assert key in paths
         assert isinstance(paths[key], Path)

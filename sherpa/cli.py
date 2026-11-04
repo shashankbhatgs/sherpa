@@ -8,6 +8,7 @@ import click
 
 import sherpa
 from sherpa.interviewer import InterviewSession, State
+from sherpa.scout import LINKEDIN_NOTE_LIMIT
 from sherpa.telemetry import burnout_status, is_blocked
 from sherpa.tracker import ValidationGap
 from sherpa.workspace import workspace_paths
@@ -38,6 +39,47 @@ def track(text: str) -> None:
         sys.exit(1)
     click.secho("Tracked:", fg="green")
     click.echo(json.dumps(result, indent=2))
+
+
+_EDITOR_MARKER = "# Paste the job post above. Lines starting with '#' are ignored."
+
+
+@cli.command()
+@click.option("--file", "job_file", type=click.File("r"), help="Read the job post from a file.")
+def outreach(job_file) -> None:
+    """Draft a LinkedIn note and cold email for a job post.
+
+    Reads the job post from --file, from stdin (e.g. `pbpaste | sherpa outreach`),
+    or opens your editor so you can paste it.
+    """
+    if job_file is not None:
+        job_post = job_file.read()
+    elif not sys.stdin.isatty():
+        job_post = sys.stdin.read()
+    else:
+        edited = click.edit(f"\n\n{_EDITOR_MARKER}\n") or ""
+        job_post = "\n".join(line for line in edited.splitlines() if not line.startswith("#"))
+
+    if not job_post.strip():
+        raise click.ClickException("No job post given. Paste one, pipe it in, or pass --file.")
+
+    try:
+        draft = sherpa.draft_outreach(job_post)
+    except sherpa.OutreachError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    title = f"{draft.company} - {draft.role}" if draft.role else draft.company
+    click.secho(title, bold=True)
+    match = "Strong match" if draft.aligned else "Weak match"
+    source = "full resume used" if draft.used_full_resume else "resume index only"
+    click.secho(f"{match}, {source}\n", fg="green" if draft.aligned else "yellow")
+
+    click.secho(f"LinkedIn note ({len(draft.linkedin_note)}/{LINKEDIN_NOTE_LIMIT} chars)", fg="cyan")
+    click.echo(f"{draft.linkedin_note}\n")
+    click.secho("Email", fg="cyan")
+    click.echo(f"Subject: {draft.email_subject}\n")
+    click.echo(f"{draft.email_body}\n")
+    click.echo(f"Saved to {draft.path}")
 
 
 @cli.command()

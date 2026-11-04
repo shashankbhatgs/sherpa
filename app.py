@@ -8,6 +8,7 @@ import streamlit as st
 
 import sherpa
 from sherpa.interviewer import InterviewSession, State
+from sherpa.scout import LINKEDIN_NOTE_LIMIT
 from sherpa.telemetry import burnout_status, is_blocked
 from sherpa.tracker import ValidationGap
 from sherpa.workspace import workspace_paths
@@ -86,15 +87,41 @@ with tab_interview:
 
 # ── Scout ──────────────────────────────────────────────────────────────────────
 with tab_scout:
-    st.header("Resume Scout")
-    index = sherpa.resume_index()
-    st.text(index)
-    if st.button("Show full resume"):
-        full = sherpa.fetch_full_resume()
-        if full:
-            st.markdown(full)
-        else:
-            st.info("No resume found at ~/.sherpa/resume.md")
+    st.header("Job Scout & Outreach")
+    job_post = st.text_area(
+        "Paste a job post",
+        height=220,
+        placeholder="Paste the full job description, including the company and role.",
+    )
+    if st.button("Draft outreach", key="outreach_btn") and job_post.strip():
+        with st.spinner("Reading the job post and drafting..."):
+            try:
+                st.session_state["outreach_draft"] = sherpa.draft_outreach(job_post)
+            except sherpa.OutreachError as exc:
+                st.session_state["outreach_draft"] = None
+                st.error(str(exc))
+
+    draft: sherpa.OutreachDraft | None = st.session_state.get("outreach_draft")
+    if draft is not None:
+        st.subheader(f"{draft.company} - {draft.role}" if draft.role else draft.company)
+        match = "Strong match" if draft.aligned else "Weak match"
+        source = "full resume used" if draft.used_full_resume else "resume index only"
+        (st.success if draft.aligned else st.warning)(f"{match}, {source}")
+
+        st.markdown(f"**LinkedIn note** ({len(draft.linkedin_note)}/{LINKEDIN_NOTE_LIMIT} chars)")
+        st.code(draft.linkedin_note, language=None, wrap_lines=True)
+        st.markdown("**Email**")
+        st.code(f"Subject: {draft.email_subject}\n\n{draft.email_body}", language=None, wrap_lines=True)
+        st.caption(f"Saved to {draft.path}")
+
+    with st.expander("Resume index"):
+        st.text(sherpa.resume_index())
+        if st.button("Show full resume"):
+            full = sherpa.fetch_full_resume()
+            if full:
+                st.markdown(full)
+            else:
+                st.info("No resume found at ~/.sherpa/resume.md")
 
 # ── Stats ──────────────────────────────────────────────────────────────────────
 with tab_stats:
