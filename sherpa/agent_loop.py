@@ -38,3 +38,20 @@ def run_tool_loop(
             messages.append({"role": "tool", "name": name, "content": str(result)})
 
     return messages[-1].get("content", "") if messages else ""
+
+
+def parse_json_object(raw: str) -> dict:
+    """Parse a JSON object from LLM output, tolerating prose around it. Returns {} if none is found."""
+    stripped = raw.strip()
+    try:
+        parsed = json.loads(stripped)
+    except (json.JSONDecodeError, ValueError):
+        start = stripped.find("{")
+        end = stripped.rfind("}") + 1
+        if start == -1 or end <= start:
+            return {}
+        try:
+            parsed = json.loads(stripped[start:end])
+        except json.JSONDecodeError:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}

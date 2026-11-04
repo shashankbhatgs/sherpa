@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sherpa.agent_loop import run_tool_loop
+from sherpa.agent_loop import parse_json_object, run_tool_loop
 from sherpa.config import get_config
 from sherpa.llm_router import get_provider
 from sherpa.scout import FETCH_RESUME_TOOL, SCOUT_REGISTRY
@@ -42,19 +42,7 @@ def track(text: str) -> dict | ValidationGap:
         registry=SCOUT_REGISTRY,
     )
 
-    try:
-        entry = json.loads(raw.strip())
-    except (json.JSONDecodeError, ValueError):
-        stripped = raw.strip()
-        start = stripped.find("{")
-        end = stripped.rfind("}") + 1
-        if start != -1 and end > start:
-            try:
-                entry = json.loads(stripped[start:end])
-            except json.JSONDecodeError:
-                entry = {}
-        else:
-            entry = {}
+    entry = parse_json_object(raw)
 
     missing = [f for f in REQUIRED_FIELDS if not entry.get(f)]
     if missing:
