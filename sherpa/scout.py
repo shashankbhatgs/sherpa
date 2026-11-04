@@ -85,6 +85,8 @@ that match the job's requirements.
 4. Never state the candidate's preferences or circumstances (location, relocation, in-office or remote, \
 availability, notice period, salary, visa) unless they appear in the summary or the resume.
 5. When mentioning experience, use "Years experience" from the summary as given.
+6. The resume is ordered by importance: earlier roles and bullets matter most. Pick proof points from the top \
+down, and use a later item only when nothing above it matches what the job asks for.
 
 Return ONLY a JSON object with these keys:
 - company (string): the hiring company

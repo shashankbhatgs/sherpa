@@ -385,4 +385,5 @@ def test_note_prompt_asks_for_fit_evidence_not_filler(workspace, mocker):
     assert 'answers "why are you a good fit for this role?"' in system
     assert "BOTH the job post and the resume" in system
     assert "no dead prose" in system
+    assert "ordered by importance" in system
     assert '"strong fit"' in system and '"love to be considered"' in system
