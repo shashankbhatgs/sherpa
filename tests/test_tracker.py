@@ -198,11 +198,17 @@ def test_cli_rejects_invalid_stage_choice(workspace, mocker):
 SHEET_HEADERS = ["Company", "Role", "Stage", "Status", "Interviewer/HA/POC Name or Phone number (optional)", "Job ID", "Link to portal", "Date"]
 
 
-def _sheet(mocker, headers=SHEET_HEADERS):
+def _sheet(mocker, headers=SHEET_HEADERS, rows=None, row_count=1000):
     sheet = mocker.MagicMock()
-    sheet.row_values.return_value = headers
+    sheet.get_all_values.return_value = [headers] + (rows or [])
+    sheet.row_count = row_count
     mocker.patch("sherpa.tracker._get_sheet", return_value=sheet)
     return sheet
+
+
+def _written(sheet):
+    call = sheet.update.call_args
+    return call.kwargs["range_name"], call.kwargs["values"][0]
 
 
 def test_sheet_row_follows_header_names(workspace, mocker):
@@ -215,9 +221,8 @@ def test_sheet_row_follows_header_names(workspace, mocker):
 
     track("x")
 
-    row = sheet.append_row.call_args.args[0]
-    assert row == ["Navi", "SDE 2", "Not applied", "Asked for referral", "Ankur Raj", "NTL-7133", "https://navi.example/job", "10/11/2026"]
-    assert sheet.append_row.call_args.kwargs["value_input_option"] == "USER_ENTERED"
+    assert _written(sheet) == ("A2", ["Navi", "SDE 2", "Not applied", "Asked for referral", "Ankur Raj", "NTL-7133", "https://navi.example/job", "10/11/2026"])
+    assert sheet.update.call_args.kwargs["value_input_option"] == "USER_ENTERED"
 
 
 def test_sheet_columns_can_be_reordered_and_unknown_headers_left_blank(workspace, mocker):
@@ -226,7 +231,7 @@ def test_sheet_columns_can_be_reordered_and_unknown_headers_left_blank(workspace
 
     track("x")
 
-    assert sheet.append_row.call_args.args[0] == ["01/02/2026", "", "Acme", "Applied"]
+    assert _written(sheet)[1] == ["01/02/2026", "", "Acme", "Applied"]
 
 
 def test_sheet_date_format_from_config(workspace, mocker):
@@ -236,7 +241,7 @@ def test_sheet_date_format_from_config(workspace, mocker):
 
     track("x")
 
-    assert sheet.append_row.call_args.args[0] == ["Acme", "02/01/2026"]
+    assert _written(sheet)[1] == ["Acme", "02/01/2026"]
 
 
 def test_sheet_with_no_matching_headers_is_not_written(workspace, mocker, capsys):
@@ -245,14 +250,14 @@ def test_sheet_with_no_matching_headers_is_not_written(workspace, mocker, capsys
 
     entry = track("x")
 
-    sheet.append_row.assert_not_called()
+    sheet.update.assert_not_called()
     assert _lines(workspace) == [entry]
     assert "saved locally only" in capsys.readouterr().err
 
 
 def test_sheet_failure_keeps_local_entry(workspace, mocker):
     sheet = _sheet(mocker)
-    sheet.append_row.side_effect = Exception("network error")
+    sheet.update.side_effect = Exception("network error")
     _extract(mocker, {"company": "Google", "stage": "Interview"})
 
     assert isinstance(track("Interview with Google"), dict)
@@ -265,7 +270,7 @@ def test_sheet_success_still_writes_local_ledger(workspace, mocker):
 
     track("Acme")
 
-    sheet.append_row.assert_called_once()
+    sheet.update.assert_called_once()
     assert _lines(workspace)[0]["company"] == "Acme"
 
 
@@ -283,3 +288,25 @@ def test_load_applications_skips_bad_lines(workspace):
 
 def test_load_applications_without_file(tmp_workspace):
     assert load_applications() == []
+
+
+def test_sheet_row_goes_right_after_last_filled_row(workspace, mocker):
+    # Trailing empty rows (formatted or validated in the real sheet) must not push the write down.
+    rows = [["Rippling", "SDE 1"], ["Navi", "SDE 2"], ["", ""], ["  ", ""], ["", ""]]
+    sheet = _sheet(mocker, rows=rows, row_count=1015)
+    _extract(mocker, {"company": "Plum", "stage": "Applied"})
+
+    track("x")
+
+    assert _written(sheet)[0] == "A4"
+    sheet.add_rows.assert_not_called()
+
+
+def test_full_sheet_grows_before_writing(workspace, mocker):
+    sheet = _sheet(mocker, rows=[["A"], ["B"]], row_count=3)
+    _extract(mocker, {"company": "Plum", "stage": "Applied"})
+
+    track("x")
+
+    sheet.add_rows.assert_called_once_with(1)
+    assert _written(sheet)[0] == "A4"

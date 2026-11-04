@@ -208,14 +208,28 @@ def _get_sheet():
 
 
 def _append_sheet(sheet, entry: dict) -> None:
-    """Append one row, placing each field under its configured column header (order does not matter)."""
+    """Write one row below the last row with values, placing each field under its column header.
+
+    Sheets' own append detects the "table" from formatting too, so on a sheet with formatted or
+    validated empty rows it lands far below the data; writing to the first empty row avoids that.
+    """
     columns = {**DEFAULT_COLUMNS, **(_tracker_config().get("columns") or {})}
     field_by_header = {_label_key(header): name for name, header in columns.items() if isinstance(header, str)}
-    headers = sheet.row_values(1)
+    values = sheet.get_all_values()
+    headers = values[0] if values else []
     fields = [field_by_header.get(_label_key(h)) for h in headers]
     if not any(fields):
         raise ValueError("none of the sheet's row-1 headers match config.tracker.columns")
-    sheet.append_row([_sheet_value(entry, name) for name in fields], value_input_option="USER_ENTERED")
+
+    last_filled = max((i for i, row in enumerate(values, start=1) if any(c.strip() for c in row)), default=1)
+    target = last_filled + 1
+    if target > sheet.row_count:
+        sheet.add_rows(target - sheet.row_count)
+    sheet.update(
+        range_name=f"A{target}",
+        values=[[_sheet_value(entry, name) for name in fields]],
+        value_input_option="USER_ENTERED",
+    )
 
 
 def _sheet_value(entry: dict, name: str | None) -> str:
