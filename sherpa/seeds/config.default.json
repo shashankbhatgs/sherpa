@@ -27,6 +27,19 @@
     "closing_ask": "ask them to consider the candidate for this role, or to point them to the right person; do not ask for a call or meeting"
   },
   "tracker": {
-    "spreadsheet_url": null
+    "spreadsheet_url": null,
+    "stages": ["Not applied", "Applied", "Phone call", "Take Home Assessment", "Interview", "Offer"],
+    "statuses": ["Asked for referral", "Got referral", "Waiting", "Didn't hear back", "Rejected"],
+    "columns": {
+      "company": "Company",
+      "role": "Role",
+      "stage": "Stage",
+      "status": "Status",
+      "contact": "Interviewer/HA/POC Name or Phone number (optional)",
+      "job_id": "Job ID",
+      "link": "Link to portal",
+      "date": "Date"
+    },
+    "date_format": "%m/%d/%Y"
   }
 }

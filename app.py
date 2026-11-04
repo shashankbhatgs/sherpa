@@ -46,8 +46,8 @@ with tab_track:
             answers = {}
             if "company" in gap.missing:
                 answers["company"] = st.text_input("Company")
-            if "state" in gap.missing:
-                answers["state"] = st.selectbox("Status", sherpa.VALID_STATES)
+            if "stage" in gap.missing:
+                answers["stage"] = st.selectbox("Stage", sherpa.application_stages())
             submitted = st.form_submit_button("Save")
         if submitted:
             completed = sherpa.complete_track(gap.partial, answers)

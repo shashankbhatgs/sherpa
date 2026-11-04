@@ -38,7 +38,7 @@ def init() -> None:
     click.echo("Workspace ready.")
 
 
-_FIELD_LABELS = {"company": "Company", "state": "Status"}
+_FIELD_LABELS = {"company": "Company", "stage": "Stage"}
 
 
 @cli.command()
@@ -49,7 +49,7 @@ def track(text: str) -> None:
     if isinstance(result, ValidationGap):
         click.secho(f"Need a bit more: {', '.join(_FIELD_LABELS[f] for f in result.missing)}", fg="yellow")
         answers = {
-            field: click.prompt(_FIELD_LABELS[field], type=click.Choice(sherpa.VALID_STATES) if field == "state" else str)
+            field: click.prompt(_FIELD_LABELS[field], type=click.Choice(sherpa.application_stages(), case_sensitive=False) if field == "stage" else str)
             for field in result.missing
         }
         result = sherpa.complete_track(result.partial, answers)
