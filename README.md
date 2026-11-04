@@ -38,7 +38,8 @@ If something essential is missing, it asks for just that field instead of guessi
 
 **Tailored outreach.**
 Paste a job post and get a LinkedIn connection note (under 300 characters) and a short cold email.
-The model first sees a four-line summary of your profile, and only reads your full resume when the role is a real match, so messages cite your actual projects and never invent experience.
+The model first sees a four-line summary of your profile, and only reads your full resume when the role is a real match, so messages cite your actual projects and never invent experience or personal details like location or availability.
+The email lands on your clipboard, and the closing ask is configurable (by default it asks to be considered or pointed to the right person, not for a call).
 
 **A burnout guard.**
 Sherpa tracks active interview-practice minutes per day.
@@ -58,14 +59,15 @@ pip install -e .
 sherpa init        # creates ~/.sherpa with default config and sample questions
 ```
 
-Then fill in `~/.sherpa/profile.json` (skills, years of experience, target roles) and `~/.sherpa/resume.md`.
+Then fill in `~/.sherpa/profile.json` (skills, target roles, and `experience_since` as `"YYYY-MM"`, so your years of experience stay current) and `~/.sherpa/resume.md`.
 
 ```bash
 sherpa interview --list                      # see the question bank
 sherpa interview -q hld_distributed_cache    # start a mock interview
 sherpa interview                             # resume today's unfinished session
 sherpa track "Got an OA from Zerodha for SDE2 today"
-pbpaste | sherpa outreach                    # draft outreach for a copied job post
+pbpaste | sherpa outreach                    # draft outreach for a copied job post (email lands on your clipboard)
+sherpa outreach --last --copy note           # then copy the LinkedIn note
 sherpa review --file solution.py --problem "LRU cache"
 sherpa stats                                 # today's practice minutes and activity
 

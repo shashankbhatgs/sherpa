@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
 
 import click
@@ -58,14 +60,38 @@ def track(text: str) -> None:
 _EDITOR_MARKER = "# Paste the job post above. Lines starting with '#' are ignored."
 
 
+# Tried in order; the first one installed is used.
+_CLIPBOARD_COMMANDS = (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"], ["clip"])
+
+
+def _copy_to_clipboard(text: str) -> bool:
+    for command in _CLIPBOARD_COMMANDS:
+        if shutil.which(command[0]):
+            return subprocess.run(command, input=text, text=True, check=False).returncode == 0
+    return False
+
+
 @cli.command()
 @click.option("--file", "job_file", type=click.File("r"), help="Read the job post from a file.")
-def outreach(job_file) -> None:
+@click.option(
+    "--copy", "copy_part", type=click.Choice(["email", "note", "none"]), default="email", show_default=True,
+    help="Which part to put on the clipboard.",
+)
+@click.option("--last", is_flag=True, help="Show the most recent saved draft instead of writing a new one.")
+def outreach(job_file, copy_part: str, last: bool) -> None:
     """Draft a LinkedIn note and cold email for a job post.
 
     Reads the job post from --file, from stdin (e.g. `pbpaste | sherpa outreach`),
-    or opens your editor so you can paste it.
+    or opens your editor so you can paste it. The email is copied to the clipboard;
+    use `sherpa outreach --last --copy note` to copy the LinkedIn note afterwards.
     """
+    if last:
+        draft = sherpa.latest_outreach()
+        if draft is None:
+            raise click.ClickException("No saved outreach drafts yet.")
+        _show_draft(draft, copy_part)
+        return
+
     if job_file is not None:
         job_post = job_file.read()
     elif not sys.stdin.isatty():
@@ -81,7 +107,10 @@ def outreach(job_file) -> None:
         draft = sherpa.draft_outreach(job_post)
     except sherpa.OutreachError as exc:
         raise click.ClickException(str(exc)) from exc
+    _show_draft(draft, copy_part)
 
+
+def _show_draft(draft: sherpa.OutreachDraft, copy_part: str) -> None:
     title = f"{draft.company} - {draft.role}" if draft.role else draft.company
     click.secho(title, bold=True)
     match = "Strong match" if draft.aligned else "Weak match"
@@ -94,6 +123,15 @@ def outreach(job_file) -> None:
     click.echo(f"Subject: {draft.email_subject}\n")
     click.echo(f"{draft.email_body}\n")
     click.echo(f"Saved to {draft.path}")
+
+    if copy_part == "none":
+        return
+    text = draft.linkedin_note if copy_part == "note" else f"Subject: {draft.email_subject}\n\n{draft.email_body}"
+    if _copy_to_clipboard(text):
+        other = "note" if copy_part == "email" else "email"
+        click.secho(f"Copied the {copy_part} to your clipboard. For the {other}: sherpa outreach --last --copy {other}", fg="green")
+    else:
+        click.secho("Could not find a clipboard tool (pbcopy, wl-copy, xclip); copy it from above.", fg="yellow")
 
 
 @cli.command()

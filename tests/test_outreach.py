@@ -241,3 +241,137 @@ def test_cli_backend_failure_is_a_clean_error(workspace, mocker):
     assert result.exit_code == 1
     assert "Error: Claude Code CLI not found" in result.output
     assert "Traceback" not in result.output
+
+
+# --- experience, closing ask, no invented claims ---
+
+from datetime import date as _date
+
+from sherpa.scout import experience_years, latest_outreach, resume_index
+
+
+@pytest.mark.parametrize(
+    "since, today, expected",
+    [
+        ("2024-01", _date(2026, 11, 4), 3),  # 2y10m rounds up
+        ("2024-01", _date(2026, 6, 30), 2),  # 2y5m rounds down
+        ("2024-01", _date(2026, 7, 1), 3),  # 2y6m rounds half up
+        ("2026-11", _date(2026, 11, 4), 0),
+        ("2030-01", _date(2026, 11, 4), 0),  # future start never goes negative
+    ],
+)
+def test_experience_years(since, today, expected):
+    assert experience_years(since, today) == expected
+
+
+@pytest.mark.parametrize("since", [None, "", "Jan 2024", "2024-13", 2024])
+def test_experience_years_invalid(since):
+    assert experience_years(since) is None
+
+
+def test_resume_index_prefers_experience_since(workspace):
+    profile = json.loads((workspace / "profile.json").read_text())
+    profile["experience_since"] = f"{_date.today().year - 5}-{_date.today().month:02d}"
+    (workspace / "profile.json").write_text(json.dumps(profile))
+    assert "Years experience: 5" in resume_index()
+
+
+def test_resume_index_falls_back_to_years_experience(workspace):
+    assert "Years experience: 2" in resume_index()
+
+
+def test_prompt_forbids_invented_preferences_and_calls(workspace, mocker):
+    provider = _use(mocker, FakeProvider([_answer(_draft_json())]))
+
+    draft_outreach(JOB_POST)
+
+    system = provider.calls[0]["messages"][0]["content"]
+    assert "in-office or remote" in system
+    assert "do not ask for a call or meeting" in system
+
+
+def test_closing_ask_comes_from_config(workspace, mocker):
+    config = json.loads((workspace / "config.json").read_text())
+    config["outreach"] = {"closing_ask": "ask for a referral"}
+    (workspace / "config.json").write_text(json.dumps(config))
+    import sherpa
+
+    sherpa._reset_config()
+    provider = _use(mocker, FakeProvider([_answer(_draft_json())]))
+
+    draft_outreach(JOB_POST)
+
+    assert "End with this ask, in your own words: ask for a referral" in provider.calls[0]["messages"][0]["content"]
+
+
+# --- saved drafts and clipboard ---
+
+def test_latest_outreach_round_trips_the_newest_draft(workspace, mocker):
+    _use(mocker, FakeProvider([_answer(_draft_json(company="First")), _answer(_draft_json(company="Second"))]))
+    draft_outreach(JOB_POST)
+    saved = draft_outreach(JOB_POST)
+
+    loaded = latest_outreach()
+
+    assert loaded.company == "Second"
+    assert loaded.path == saved.path
+    assert loaded.linkedin_note == saved.linkedin_note
+    assert loaded.email_subject == saved.email_subject
+    assert loaded.email_body == saved.email_body
+    assert loaded.aligned is True
+
+
+def test_latest_outreach_none_without_drafts(workspace):
+    assert latest_outreach() is None
+
+
+@pytest.fixture
+def clipboard(mocker, monkeypatch):
+    import sherpa.cli
+
+    monkeypatch.setattr(sherpa.cli, "_CLIPBOARD_COMMANDS", (["pbcopy"],))
+    mocker.patch("sherpa.cli.shutil.which", return_value="/usr/bin/pbcopy")
+    return mocker.patch("sherpa.cli.subprocess.run", return_value=mocker.Mock(returncode=0))
+
+
+def test_cli_copies_email_by_default(workspace, mocker, clipboard):
+    _use(mocker, FakeProvider([_answer(_draft_json())]))
+
+    result = CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
+
+    assert result.exit_code == 0, result.output
+    copied = clipboard.call_args.kwargs["input"]
+    assert copied.startswith("Subject: SDE2 Payments - Kafka pipelines at Acme\n\nHi,")
+    assert "Copied the email to your clipboard. For the note: sherpa outreach --last --copy note" in result.output
+
+
+def test_cli_last_copies_note_without_calling_model(workspace, mocker, clipboard):
+    _use(mocker, FakeProvider([_answer(_draft_json())]))
+    CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
+    provider = _use(mocker, FakeProvider([]))
+
+    result = CliRunner().invoke(cli, ["outreach", "--last", "--copy", "note"])
+
+    assert result.exit_code == 0, result.output
+    assert provider.calls == []
+    assert clipboard.call_args.kwargs["input"].startswith("Hi! I built Kafka-backed")
+
+
+def test_cli_copy_none_leaves_clipboard_alone(workspace, mocker, clipboard):
+    _use(mocker, FakeProvider([_answer(_draft_json())]))
+    result = CliRunner().invoke(cli, ["outreach", "--copy", "none"], input=JOB_POST)
+    assert result.exit_code == 0
+    clipboard.assert_not_called()
+
+
+def test_cli_without_clipboard_tool_warns(workspace, mocker):
+    _use(mocker, FakeProvider([_answer(_draft_json())]))
+    result = CliRunner().invoke(cli, ["outreach"], input=JOB_POST)
+    assert result.exit_code == 0
+    assert "Could not find a clipboard tool" in result.output
+
+
+def test_cli_last_without_drafts_errors(workspace):
+    result = CliRunner().invoke(cli, ["outreach", "--last"])
+    assert result.exit_code != 0
+    assert "No saved outreach drafts" in result.output

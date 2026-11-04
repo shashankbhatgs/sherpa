@@ -23,6 +23,9 @@
     "daily_minutes_threshold": 180,
     "cooldown_hours": 12
   },
+  "outreach": {
+    "closing_ask": "ask them to consider the candidate for this role, or to point them to the right person; do not ask for a call or meeting"
+  },
   "tracker": {
     "spreadsheet_url": null
   }

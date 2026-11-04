@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Callable
 
 from sherpa.agent_loop import parse_json_object, run_tool_loop
+from sherpa.config import get_config
 from sherpa.llm_router import get_provider
 from sherpa.workspace import workspace_paths
 
@@ -19,10 +20,25 @@ def resume_index() -> str:
         profile = {}
 
     name = profile.get("name", "")
-    years = profile.get("years_experience", 0)
+    years = experience_years(profile.get("experience_since"))
+    if years is None:
+        years = profile.get("years_experience", 0)
     competencies = ", ".join(profile.get("core_competencies", []))
     roles = ", ".join(profile.get("target_roles", []))
     return f"Name: {name}\nYears experience: {years}\nCore competencies: {competencies}\nTarget roles: {roles}"
+
+
+def experience_years(since: object, today: date | None = None) -> int | None:
+    """Whole years since a "YYYY-MM" start, rounded to the nearest year (2y10m -> 3); None if unset or invalid."""
+    if not isinstance(since, str):
+        return None
+    try:
+        start = datetime.strptime(since.strip(), "%Y-%m").date()
+    except ValueError:
+        return None
+    today = today or date.today()
+    months = (today.year - start.year) * 12 + (today.month - start.month)
+    return max(0, (months + 6) // 12)  # half-up: 2y6m -> 3 (round() would give 2)
 
 
 def fetch_full_resume() -> str:
@@ -66,6 +82,9 @@ Steps:
 2. If it aligns, call the fetch_full_resume tool and ground the message in concrete projects from the resume \
 that match the job's requirements.
 3. Never invent employers, projects, skills, or metrics that are not in the summary or the resume.
+4. Never state the candidate's preferences or circumstances (location, relocation, in-office or remote, \
+availability, notice period, salary, visa) unless they appear in the summary or the resume.
+5. When mentioning experience, use "Years experience" from the summary as given.
 
 Return ONLY a JSON object with these keys:
 - company (string): the hiring company
@@ -73,7 +92,7 @@ Return ONLY a JSON object with these keys:
 - aligned (boolean): true if the role fits the candidate
 - linkedin_note (string): a LinkedIn connection note, at most {limit} characters
 - email_subject (string): a specific subject line, under 10 words
-- email_body (string): a plain-text email under 150 words that ends with one clear ask
+- email_body (string): a plain-text email under 150 words. End with this ask, in your own words: {closing_ask}
 
 No markdown fences, no explanation."""
 
@@ -117,7 +136,9 @@ def draft_outreach(job_post: str) -> OutreachDraft:
 
     provider = get_provider("default")
     messages = [
-        {"role": "system", "content": _OUTREACH_PROMPT.format(index=resume_index(), limit=LINKEDIN_NOTE_LIMIT)},
+        {"role": "system", "content": _OUTREACH_PROMPT.format(
+            index=resume_index(), limit=LINKEDIN_NOTE_LIMIT, closing_ask=_closing_ask(),
+        )},
         {"role": "user", "content": f"Job post:\n\n{job_post}"},
     ]
     raw = run_tool_loop(
@@ -159,6 +180,18 @@ def draft_outreach(job_post: str) -> OutreachDraft:
     return draft
 
 
+_DEFAULT_CLOSING_ASK = (
+    "ask them to consider the candidate for this role, or to point them to the right person; "
+    "do not ask for a call or meeting"
+)
+
+
+def _closing_ask() -> str:
+    cfg = get_config().get("outreach") or {}
+    ask = cfg.get("closing_ask") if isinstance(cfg, dict) else None
+    return ask.strip() if isinstance(ask, str) and ask.strip() else _DEFAULT_CLOSING_ASK
+
+
 def _text(data: dict, key: str) -> str:
     value = data.get(key)
     return value.strip() if isinstance(value, str) else ""
@@ -176,6 +209,53 @@ def _trim_to_limit(text: str, limit: int) -> str:
         return head.rstrip()
     word_end = head.rfind(" ")
     return head[:word_end].rstrip(" ,;:-") if word_end > 0 else head
+
+
+def latest_outreach() -> OutreachDraft | None:
+    """The most recently saved draft in ~/.sherpa/outreach/, or None if there are none or it is unreadable."""
+    outreach_dir = workspace_paths()["outreach"]
+    paths = list(outreach_dir.glob("outreach_*_*.md")) if outreach_dir.exists() else []
+    if not paths:
+        return None
+    return _read_outreach(max(paths, key=_outreach_sort_key))
+
+
+def _outreach_sort_key(path: Path) -> tuple[str, int]:
+    _, day, number = path.stem.split("_", 2)
+    return day, int(number) if number.isdigit() else 0
+
+
+def _read_outreach(path: Path) -> OutreachDraft | None:
+    text = path.read_text(encoding="utf-8")
+    header, _, body = text.removeprefix("---\n").partition("\n---\n")
+    meta = dict(line.split(": ", 1) for line in header.splitlines() if ": " in line)
+    sections = _markdown_sections(body)
+    subject, _, email_body = sections.get("Email", "").partition("\n\n")
+    note = sections.get("LinkedIn note", "")
+    if not note or not email_body:
+        return None
+    return OutreachDraft(
+        company=meta.get("company", ""),
+        role=meta.get("role", ""),
+        aligned=meta.get("aligned") == "true",
+        used_full_resume=meta.get("used_full_resume") == "true",
+        linkedin_note=note,
+        email_subject=subject.removeprefix("Subject: ").strip(),
+        email_body=email_body.strip(),
+        path=path,
+    )
+
+
+def _markdown_sections(body: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    current = None
+    for line in body.splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            sections[current] = ""
+        elif current is not None:
+            sections[current] += line + "\n"
+    return {name: content.strip() for name, content in sections.items()}
 
 
 def _next_outreach_path() -> Path:
