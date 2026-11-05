@@ -22,7 +22,7 @@ System design (`hld`) goes from scale requirements to high-level design, then a 
 Coding (`dsa`) goes from constraints and edge cases to an approach, then code.
 Object-oriented design (`lld`) goes from requirements to class design, then code.
 Every kind ends with structured feedback against an SDE2 rubric for that kind.
-It will not let you skip ahead: you cannot start designing until you have pinned down scale (users, requests per second, latency targets).
+It will not let you skip ahead: in system design you cannot start designing until you have pinned down scale (users, requests per second, latency targets), and in coding you settle constraints and an approach before writing code.
 Sessions are saved as you go, so a crash or closed terminal never loses your progress.
 
 **Code review during practice.**
