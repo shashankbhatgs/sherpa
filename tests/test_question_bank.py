@@ -4,7 +4,7 @@ from click.testing import CliRunner
 import sherpa.workspace as ws
 from sherpa.cli import cli
 from sherpa.interviewer import InterviewSession
-from sherpa.question_bank import QuestionNotFoundError, list_questions, load_question
+from sherpa.question_bank import Kind, QuestionNotFoundError, list_questions, load_question
 
 SEEDED = ["dsa_lru_cache", "hld_distributed_cache", "lld_parking_lot"]
 
@@ -146,3 +146,24 @@ def test_cli_unknown_question_errors(tmp_workspace):
     result = CliRunner().invoke(cli, ["interview", "-q", "nope"])
     assert result.exit_code != 0
     assert "Available:" in result.output
+
+
+def test_seeded_questions_declare_kind_by_prefix(tmp_workspace):
+    ws.init_workspace()
+    assert {q.name: q.kind for q in list_questions()} == {
+        "dsa_lru_cache": Kind.DSA,
+        "hld_distributed_cache": Kind.HLD,
+        "lld_parking_lot": Kind.LLD,
+    }
+
+
+def test_unprefixed_question_defaults_to_hld(tmp_workspace):
+    ws.init_workspace()
+    (tmp_workspace / "question_bank" / "url_shortener.md").write_text("# URL Shortener\n", encoding="utf-8")
+    assert load_question("url_shortener").kind == Kind.HLD
+
+
+def test_cli_list_shows_kind(tmp_workspace):
+    ws.init_workspace()
+    result = CliRunner().invoke(cli, ["interview", "--list"])
+    assert "dsa " in result.output and "lld " in result.output

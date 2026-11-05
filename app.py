@@ -80,7 +80,7 @@ with tab_interview:
             questions = {q.title: q.name for q in sherpa.list_questions()}
             custom = "Custom topic"
             choice = st.selectbox("Question", [custom, *questions], help="Pick from the question bank or type your own.")
-            col1, col2 = st.columns([3, 1])
+            col1, col2, col3 = st.columns([3, 1, 1])
             with col1:
                 topic = st.text_input(
                     "Topic",
@@ -89,6 +89,13 @@ with tab_interview:
                     value="" if choice == custom else choice,
                 )
             with col2:
+                kind = st.selectbox(
+                    "Kind",
+                    [k.value for k in sherpa.Kind],
+                    disabled=choice != custom,
+                    help="hld: system design, lld: class design, dsa: coding. Bank questions use their own kind.",
+                )
+            with col3:
                 st.write("")
                 st.write("")
                 start_btn = st.button("Start Session")
@@ -96,7 +103,11 @@ with tab_interview:
             question = questions.get(choice)
             if start_btn and (question or topic.strip()):
                 try:
-                    session = InterviewSession.start(None if question else topic.strip(), question=question)
+                    session = InterviewSession.start(
+                        None if question else topic.strip(),
+                        question=question,
+                        kind=None if question else sherpa.Kind(kind),
+                    )
                     st.session_state["interview_session"] = session
                     st.session_state["interview_messages"] = []
                     st.rerun()

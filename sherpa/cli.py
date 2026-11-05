@@ -137,8 +137,14 @@ def _show_draft(draft: sherpa.OutreachDraft, copy_part: str) -> None:
 @cli.command()
 @click.argument("topic", required=False)
 @click.option("--question", "-q", help="Start on a question-bank question by name (see --list).")
+@click.option(
+    "--kind",
+    type=click.Choice([k.value for k in sherpa.Kind]),
+    help="Interview flow: hld (system design), lld (class design), dsa (coding). "
+    "Defaults to the question's kind, else hld.",
+)
 @click.option("--list", "list_bank", is_flag=True, help="List the question bank and exit.")
-def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
+def interview(topic: str | None, question: str | None, kind: str | None, list_bank: bool) -> None:
     """Start or resume a mock technical interview.
 
     If TOPIC or --question is given, starts a new session.
@@ -151,13 +157,13 @@ def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
         if not questions:
             raise click.ClickException("The question bank is empty. Run `sherpa init` to seed it.")
         for q in questions:
-            click.echo(f"  {q.name:28s} {q.title}")
+            click.echo(f"  {q.name:28s} {q.kind.value:4s} {q.title}")
         return
 
     session: InterviewSession
     if topic or question:
         try:
-            session = InterviewSession.start(topic, question=question)
+            session = InterviewSession.start(topic, question=question, kind=sherpa.Kind(kind) if kind else None)
         except (RuntimeError, sherpa.QuestionNotFoundError) as exc:
             raise click.ClickException(str(exc)) from exc
         click.secho(f"New session: {session.path.name}", fg="green")
@@ -167,7 +173,7 @@ def interview(topic: str | None, question: str | None, list_bank: bool) -> None:
             raise click.ClickException("No in-progress session found today. Pass a TOPIC or --question to start one.")
         click.secho(f"Resuming: {session.path.name}", fg="cyan")
 
-    click.echo(f"Topic: {session.topic}")
+    click.echo(f"Topic: {session.topic} ({session.kind.value})")
     click.echo(f"State: {session.state.value}\n")
     _repl(session)
 

@@ -1,5 +1,11 @@
 import re
+
+import pytest
+from click.testing import CliRunner
+
 import sherpa.workspace as ws
+from sherpa.cli import cli
+from sherpa.question_bank import Kind
 from sherpa.interviewer import (
     InterviewSession,
     State,
@@ -400,3 +406,92 @@ def test_latest_open_skips_unreadable_session(tmp_workspace, capsys):
 
 def test_latest_open_none_when_no_sessions(tmp_workspace):
     assert InterviewSession.latest_open() is None
+
+
+# --- interview kinds ---
+
+def _walk(session, turns):
+    states = [session.state]
+    for _ in range(turns):
+        session.turn("next")
+        states.append(session.state)
+    return states
+
+
+@pytest.mark.parametrize(
+    "kind, flow",
+    [
+        (Kind.HLD, [State.CLARIFYING, State.HIGH_LEVEL, State.DEEP_DIVE, State.FEEDBACK]),
+        (Kind.DSA, [State.CLARIFYING, State.APPROACH, State.CODE, State.FEEDBACK]),
+        (Kind.LLD, [State.CLARIFYING, State.CLASS_DESIGN, State.CODE, State.FEEDBACK]),
+    ],
+)
+def test_each_kind_walks_its_own_flow(tmp_workspace, mocker, kind, flow):
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Response"))
+    mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=True)
+
+    s = InterviewSession.start("Topic", kind=kind)
+    assert _walk(s, 3) == flow
+
+
+def test_free_text_topic_defaults_to_hld(tmp_workspace):
+    ws.init_workspace()
+    s = InterviewSession.start("Design a distributed cache")
+    assert s.kind == Kind.HLD
+    assert "DAU" in s.messages[0]["content"]
+
+
+def test_dsa_question_never_asks_about_scale(tmp_workspace, mocker):
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Response"))
+    mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=True)
+
+    s = InterviewSession.start(question="dsa_lru_cache")
+    assert s.kind == Kind.DSA
+    prompts = [s.messages[0]["content"]]
+    for _ in range(3):
+        s.turn("next")
+        prompts.append(s.messages[0]["content"])
+    assert all("DAU" not in p for p in prompts)
+    assert "input constraints" in prompts[0]
+
+
+def test_explicit_kind_overrides_question_kind(tmp_workspace):
+    ws.init_workspace()
+    s = InterviewSession.start(question="dsa_lru_cache", kind=Kind.LLD)
+    assert s.kind == Kind.LLD
+
+
+def test_kind_written_to_frontmatter_and_restored(tmp_workspace, mocker):
+    ws.init_workspace()
+    mocker.patch("sherpa.interviewer.get_provider", return_value=_fake_chat("Response"))
+    mocker.patch("sherpa.interviewer._check_exit_criteria", return_value=True)
+    s = InterviewSession.start("Two sum", kind=Kind.DSA)
+    s.turn("next")
+
+    assert "kind: dsa" in s.path.read_text()
+    resumed = InterviewSession.resume(s.path)
+    assert (resumed.kind, resumed.state) == (Kind.DSA, State.APPROACH)
+
+
+def test_resume_without_kind_is_hld(tmp_workspace):
+    ws.init_workspace()
+    path = tmp_workspace / "interviews" / "session_20260629_1.md"
+    path.write_text("---\nstate: DEEP_DIVE\ntopic: T\nstarted_at: 2026-06-29T00:00:00\n---\n")
+    assert InterviewSession.resume(path).kind == Kind.HLD
+
+
+def test_resume_rejects_state_outside_kind_flow(tmp_workspace):
+    ws.init_workspace()
+    path = tmp_workspace / "interviews" / "session_20260629_1.md"
+    path.write_text("---\nstate: DEEP_DIVE\nkind: dsa\ntopic: T\nstarted_at: 2026-06-29T00:00:00\n---\n")
+    with pytest.raises(ValueError, match="not part of the dsa"):
+        InterviewSession.resume(path)
+
+
+def test_cli_kind_option_starts_that_flow(tmp_workspace):
+    ws.init_workspace()
+    result = CliRunner().invoke(cli, ["interview", "Two sum", "--kind", "dsa"], input="quit\n")
+    assert result.exit_code == 0, result.output
+    assert "Topic: Two sum (dsa)" in result.output
