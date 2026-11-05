@@ -17,7 +17,11 @@ Sherpa takes the admin off your plate, makes practice feel like the real thing, 
 ## What it does
 
 **Mock interviews that follow a real interview's structure.**
-The interviewer moves through four stages: clarifying requirements, high-level design, a deep dive into failure modes and consistency, and finally structured feedback against an SDE2 rubric.
+Each interview kind has its own four stages.
+System design (`hld`) goes from scale requirements to high-level design, then a deep dive into failure modes and consistency.
+Coding (`dsa`) goes from constraints and edge cases to an approach, then code.
+Object-oriented design (`lld`) goes from requirements to class design, then code.
+Every kind ends with structured feedback against an SDE2 rubric for that kind.
 It will not let you skip ahead: you cannot start designing until you have pinned down scale (users, requests per second, latency targets).
 Sessions are saved as you go, so a crash or closed terminal never loses your progress.
 
@@ -65,6 +69,7 @@ Then fill in `~/.sherpa/profile.json` (skills, target roles, and `experience_sin
 ```bash
 sherpa interview --list                      # see the question bank
 sherpa interview -q hld_distributed_cache    # start a mock interview
+sherpa interview "Two sum" --kind dsa       # free-text topic with a chosen flow (default: hld)
 sherpa interview                             # resume today's unfinished session
 sherpa track "Got an OA from Zerodha for SDE2 today"
 pbpaste | sherpa outreach                    # draft outreach for a copied job post (LinkedIn note lands on your clipboard)
@@ -137,7 +142,7 @@ Everything lives in `~/.sherpa/` on your machine:
 ├── applications.jsonl   # one line per tracked application
 ├── interviews/          # one Markdown file per mock interview
 ├── outreach/            # saved LinkedIn notes and emails
-└── question_bank/       # interview questions; add your own as .md files
+└── question_bank/       # interview questions; add your own as .md files (prefix dsa_, lld_, or hld_)
 ```
 
 Prompts are sent only to the model provider you configure.
@@ -147,12 +152,12 @@ With Ollama, nothing leaves your machine.
 
 ```bash
 pip install -e ".[dev]"
-pytest                                # 191 tests, a few seconds, no network calls
+pytest                                # 233 tests, a few seconds, no network calls
 python -m pyflakes sherpa app.py tests
 ```
 
 CI runs both on every push.
-`CLAUDE.md` describes the architecture in detail, and `ROADMAP.md` lists planned work, such as interview flows tailored to coding and object-oriented design questions.
+`CLAUDE.md` describes the architecture in detail, and `ROADMAP.md` lists remaining work.
 
 ## Acknowledgements
 

@@ -2,14 +2,14 @@
 
 This is the plan for the remaining work.
 `sherpa_spec.md` defines what the product should do, and `PLAN.md` is the historical Phase 1 build plan.
-Last updated: 2026-11-04.
+Last updated: 2026-11-05.
 
 ---
 
 ## Status
 
 All four spec modules exist and work end to end on Claude Code (with Ollama as the fallback).
-117 tests pass.
+233 tests pass.
 
 | Area | State |
 |---|---|
@@ -18,7 +18,7 @@ All four spec modules exist and work end to end on Claude Code (with Ollama as t
 | Tool loop + Resume Index + `fetch_full_resume` | Done |
 | Tracker (NL extraction, Google Sheets, JSONL fallback, missing-field follow-up) | Done |
 | Outreach (LinkedIn note + cold email) | Done |
-| Interviewer 4-state machine, crash-resilient ledger, code rubric, question bank | Done; DSA/LLD flow (R6) pending |
+| Interviewer per-kind state machine (HLD/LLD/DSA), crash-resilient ledger, code rubric, question bank | Done |
 | Burnout guard and stats | Done, including advisory mode and daily activity |
 | CLI + Streamlit UI | Done |
 
@@ -109,7 +109,7 @@ Recommended: show it, do not count it.
 
 **Done when:** stats show today's interview minutes, applications, and outreach drafts separately.
 
-### R6. Interview flow per question type
+### R6. Interview flow per question type - Done
 
 **Found while building R2:** every interview runs the system-design states (CLARIFYING asks for DAU/QPS/latency), so a DSA problem like LRU cache opens by asking for daily active users.
 

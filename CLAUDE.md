@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project State
 
 All 4 phases are complete. The `sherpa/` package, CLI, Streamlit UI, and full test suite are built and pushed.
-220 tests pass. The active focus is maintenance, refinement, and real usage.
+233 tests pass. The active focus is maintenance, refinement, and real usage.
 Remaining work and its implementation plan live in `ROADMAP.md`.
 
 ## Code Standards
@@ -43,6 +43,7 @@ sherpa init
 sherpa track "Applied to Stripe for SDE2"
 sherpa interview "Design a distributed cache"
 sherpa interview --list           # question bank; start one with: sherpa interview -q lld_parking_lot
+sherpa interview "Two sum" --kind dsa   # free-text topic; kind is hld (default), lld, or dsa
 sherpa stats
 pbpaste | sherpa outreach        # or: sherpa outreach --file job.txt
 sherpa review --file solution.py --problem "LRU cache"
@@ -76,12 +77,12 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 | `tracker.py` | NL → JSON extraction; gspread sheet writer + JSONL fallback |
 | `scout.py` | Resume index (4-line metadata) + on-demand `fetch_full_resume()` tool; `draft_outreach()` cold-message engine |
 | `code_review.py` | Rubric scoring of code (correctness/edge cases, thread safety, complexity); `extract_code()` finds fenced blocks |
-| `question_bank.py` | Lists/loads `~/.sherpa/question_bank/*.md` (title from first `# ` heading) |
-| `interviewer.py` | 4-state machine: CLARIFYING → HIGH_LEVEL → DEEP_DIVE → FEEDBACK |
+| `question_bank.py` | Lists/loads `~/.sherpa/question_bank/*.md` (title from first `# ` heading, `Kind` from the `hld_`/`lld_`/`dsa_` file-name prefix, default hld) |
+| `interviewer.py` | Per-kind 4-state machine: hld CLARIFYING → HIGH_LEVEL → DEEP_DIVE → FEEDBACK; dsa CLARIFYING → APPROACH → CODE → FEEDBACK; lld CLARIFYING → CLASS_DESIGN → CODE → FEEDBACK |
 | `telemetry.py` | Per-day active-minute tallying; burnout circuit breaker; `daily_activity()` (interview minutes, applications, outreach drafts) |
 
 `sherpa/__init__.py` re-exports all public API — callers import from the package, never from sub-modules directly:
-`init_workspace`, `get_config`, `get_provider`, `track`, `complete_track`, `load_applications`, `ValidationGap`, `application_stages`, `application_statuses`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `latest_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`, `daily_activity`, `DailyActivity`.
+`init_workspace`, `get_config`, `get_provider`, `track`, `complete_track`, `load_applications`, `ValidationGap`, `application_stages`, `application_statuses`, `resume_index`, `fetch_full_resume`, `draft_outreach`, `latest_outreach`, `OutreachDraft`, `OutreachError`, `evaluate_code`, `CodeReview`, `CodeReviewError`, `Kind`, `list_questions`, `load_question`, `Question`, `QuestionNotFoundError`, `InterviewSession`, `State`, `burnout_status`, `is_blocked`, `daily_active_minutes`, `daily_activity`, `DailyActivity`.
 
 ### Key design decisions
 
@@ -93,7 +94,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 
 **Workspace** (`~/.sherpa/`): append-only JSONL (`applications.jsonl`) and Markdown logs under `interviews/` and `outreach/`. `init_workspace(force=False)` never overwrites user-edited files; `force=True` only reseeds packaged defaults (never touches `applications.jsonl`, `interviews/*`, or `outreach/*`). Seeds are packaged under `sherpa/seeds/` and copied via `importlib.resources`.
 
-**Interviewer state machine** (`sherpa/interviewer.py`): session state lives in YAML front-matter of `~/.sherpa/interviews/session_YYYYMMDD_N.md`. Turn blocks are written as `## role TIMESTAMP\ncontent`. Crash-resilient: `resume()` parses front-matter for state and replays markdown turns into the LLM's `messages` list. `start(topic=None, question=None)` checks the burnout circuit breaker before creating a session. With `question`, the bank file's text is appended to every state's system prompt (`_system_message()`), the name is stored as `question:` in front-matter, and `resume()` reloads it (a deleted file is logged and skipped).
+**Interviewer state machine** (`sherpa/interviewer.py`): session state lives in YAML front-matter of `~/.sherpa/interviews/session_YYYYMMDD_N.md`. Turn blocks are written as `## role TIMESTAMP\ncontent`. Crash-resilient: `resume()` parses front-matter for state and replays markdown turns into the LLM's `messages` list. `start(topic=None, question=None, kind=None)` checks the burnout circuit breaker before creating a session. The session `kind` (explicit, else the question's kind, else `hld`) picks the flow in `_FLOWS`, the per-state prompts and exit criteria (keyed by `(kind, state)`), and is stored as `kind:` in front-matter; a session file without `kind:` resumes as `hld`, and a state outside the kind's flow raises `ValueError`. With `question`, the bank file's text is appended to every state's system prompt (`_system_message()`), the name is stored as `question:` in front-matter, and `resume()` reloads it (a deleted file is logged and skipped).
 
 **Tracker model** (`sherpa/tracker.py`): mirrors the user's Google Sheet. An entry has a pipeline `stage` (required) and an optional `status` (outcome/referral), plus `company` (required), `role`, `contact`, `job_id`, `link`, `date` (ISO internally), `notes`. Stage/status vocabularies, sheet column headers, and the sheet date format come from `config.tracker` (`stages`, `statuses`, `columns`, `date_format`; defaults in `DEFAULT_*`). The extraction prompt lists the labels and today's date; `_normalize()` keeps known string fields, drops placeholders ("Unknown", "N/A"), and snaps stage/status onto the allowed labels (case, spacing, hyphens, curly apostrophes ignored) or drops them. Missing `company`/`stage` returns `ValidationGap(missing, partial)` without writing; the CLI prompts for those (stage as a choice) and the Track tab shows a form, both finishing with `complete_track()`. Every entry gets `tracked_at` and is appended to `applications.jsonl` first (source of truth for stats); the sheet row is then built by matching row-1 header names (order-independent, unknown headers left blank) and written to the first row after the last row with values (`USER_ENTERED`), growing the grid if needed; Sheets' own append is avoided because it treats formatted empty rows as part of the table and lands far below the data. `load_applications()` reads the ledger, skipping malformed lines.
 
@@ -127,7 +128,7 @@ app.py (Streamlit)  |  sherpa/cli.py (Click)
 - LLM calls are monkeypatched — no real network calls in tests.
 - Telemetry tests monkeypatch `daily_active_minutes` and `_last_turn_timestamp` directly.
 - Claude Code tests patch `sherpa.llm_router.subprocess.run`; Ollama tests patch `sherpa.llm_router.ollama.Client` and switch routing to Ollama-only.
-- 220 tests across 11 modules; full suite runs in ~3 seconds.
+- 233 tests across 11 modules; full suite runs in ~3 seconds.
 
 ### Skills
 
